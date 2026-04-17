@@ -127,22 +127,22 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   { 
-    uint8_t key_now = Key_Scan(); 
-    if (key_now == 1 && last_key_state == 0) 
-    {
-        current = !current; 
-    }
-    last_key_state = key_now; 
-    if(current == 0) 
-    {
-      Motor_Speed_Control_Smooth(0,0x01);
+    // uint8_t key_now = Key_Scan(); 
+    // if (key_now == 1 && last_key_state == 0) 
+    // {
+    //     current = !current; 
+    // }
+    // last_key_state = key_now; 
+    // if(current == 0) 
+    // {
+    //   Motor_Speed_Control_Smooth(0,0x01);
        
-    }
-    else 
-    {
-       Motor_Speed_Control_Smooth(100,0x01);
+    // }
+    // else 
+    // {
+    //    Motor_Speed_Control_Smooth(100,0x01);
          
-    }
+    // }
 
 
 

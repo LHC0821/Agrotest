@@ -29,7 +29,6 @@ targets:
         - Drivers/CMSIS/Device/ST/STM32H7xx/Include
         - Drivers/CMSIS/Include
         - Core/motor
-        - Core
       libList: []
     excludeList: []
     settings: {}

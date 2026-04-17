@@ -140,7 +140,7 @@ void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, flo
  */
 void RS06_reset(void){
 uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
-    float targets[] = {1.10f, 1.80f, -1.00f, 0.00f};
+    float targets[] = {-0.36f, 0.00f, 1.90f, 0.00f};
     int motor_count = sizeof(motor_ids) / sizeof(motor_ids[0]);
 
     // 第一步：批量初始化和使能
