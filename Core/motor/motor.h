@@ -68,10 +68,6 @@ uint8_t Motor_SetMode(unsigned char Mode);
  */
 void Motor_Speed_Control(int16_t InputRPM, uint8_t ID);
 
-/**
- * @brief 同时控制 4 台电机的速度 (直接发送)
- */
-void Motor_Control_All(int16_t rpms[4]);
 
 /* --- 算法优化部分接口 --- */
 
@@ -92,6 +88,9 @@ void Motor_Stop_Immediately(uint8_t ID);
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
+
+/*应用层调用函数，四个电机*/
+void Motor_Control_All(uint16_t target);
 
 /*串口读取电机数据*/
 void App_Monitor_Read(void);

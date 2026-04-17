@@ -118,11 +118,8 @@ int main(void)
    
    HAL_TIM_Base_Start_IT(&htim15);
    
-  RS06_turn();
- 
-  //  Motor_SetMode(0x01);
-  //   HAL_Delay(1000);
-  
+  RS06_reset();
+
   
   /* USER CODE END 2 */
 

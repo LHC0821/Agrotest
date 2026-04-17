@@ -46,6 +46,6 @@ void RS06_Set_Mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, uint8_t mode);
 void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad);
 void RS06_Set_Position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
 // void RS06_Set_Position_Instruction10(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s);
-void RS06_turn(void);
+void RS06_reset(void);
 
 #endif /* __RS06_H__ */

@@ -256,6 +256,21 @@ void Motor_Speed_Control_Smooth(int16_t InputRPM, uint8_t ID)
     // 更新目标，真正的CAN发送由定时器中断接管
     MotorStates[ID-1].target_rpm = InputRPM;
 }
+
+void Motor_Control_All(uint16_t target) {
+uint8_t motor_ids[] = {0x01, 0x02, 0x03, 0x04};
+int motor_count = sizeof(motor_ids) / sizeof(motor_ids[0]);
+
+
+    for (uint8_t i = 0; i < motor_count; i++) {
+        Motor_Speed_Control_Smooth(target, motor_ids[i]);
+    }
+}
+
+    
+
+
+
 /**
  * @brief 定时器中断回调函数 (由HAL库自动调用)
  * @note 

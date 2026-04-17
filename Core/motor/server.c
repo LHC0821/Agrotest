@@ -138,30 +138,28 @@ void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, flo
 /**
  * @brief  7. 舵轮测试流程（标准 CSP 模式转动 90 度演示）
  */
-void RS06_turn(void){
-    // RS06_Set_Mode(&hfdcan2, 0x05, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x05);
-    // RS06_Set_Position_Target(&hfdcan2, 0x05, -0.50f);
-    // HAL_Delay(1000);
-    // RS06_Stop(&hfdcan2,0x05);
-    
+void RS06_reset(void){
+uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
+    float targets[] = {1.10f, 1.80f, -1.00f, 0.00f};
+    int motor_count = sizeof(motor_ids) / sizeof(motor_ids[0]);
 
-    // RS06_Set_Mode(&hfdcan2, 0x06, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x06);
-    // RS06_Set_Position_Target(&hfdcan2, 0x06, -2.00f);
-    // HAL_Delay(1000);
-    // RS06_Stop(&hfdcan2,0x06);
+    // 第一步：批量初始化和使能
+    for (int i = 0; i < motor_count; i++) {
+        RS06_Set_Mode(&hfdcan2, motor_ids[i], RS06_MODE_PP);
+        RS06_Enable(&hfdcan2, motor_ids[i]);
+    }
 
-    // RS06_Set_Mode(&hfdcan2, 0x07, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x07);
-    // RS06_Set_Position_Target(&hfdcan2, 0x07, -0.00f);
-    // HAL_Delay(1000);
-    // RS06_Stop(&hfdcan2,0x07);
+    // 第二步：批量发送位置指令
+    for (int i = 0; i < motor_count; i++) {
+        RS06_Set_Position_Target(&hfdcan2, motor_ids[i], targets[i]);
+    }
 
-    // RS06_Set_Mode(&hfdcan2, 0x08, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x08);
-    // RS06_Set_Position_Target(&hfdcan2, 0x08, -0.8f);
-    // HAL_Delay(1000);
-    // RS06_Stop(&hfdcan2,0x08);
+    // 第三步：等待电机运动完成
+    HAL_Delay(1000);
+
+    // 第四步：批量停止
+    for (int i = 0; i < motor_count; i++) {
+        RS06_Stop(&hfdcan2, motor_ids[i]);
+    }
 
 }
