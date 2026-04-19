@@ -1,168 +1,154 @@
 #include "servo.h"
 #include "can.h"
-#include "main.h"
-#include <stdio.h>
+
 #include <string.h>
 
-#include "delay.h"
+// ! ========================= 变 量 声 明 ========================= ! //
 
-extern void can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t len);
+#define X(name, value) .name = RS06_SERVO_STATUS_##name,
+#define Y(name, value) .name = RS06_SERVO_MODE_##name,
+#define Z(name, value) .name = RS06_SERVO_TYPE_##name,
+const struct Rs06ServoInterface rs06_servo_instance = {
+    {
+        RS06_SERVO_STATUS_TABLE
+    },
+    {
+        RS06_SERVO_MODE_TABLE
+    },
+    {
+        RS06_SERVO_TYPE_TABLE
+    },
+    .status_str = rs06_status_str,
+    .mode_str = rs06_mode_str,
+    .enable = rs06_enable,
+    .stop = rs06_stop,
+    .change_id = rs06_change_id,
+    .set_mode = rs06_set_mode,
+    .set_position_target = rs06_set_position_target,
+    .set_position = rs06_set_position,
+    .turn = rs06_turn
+};
+#undef X
+#undef Y
+#undef Z
 
-/**
- * @brief  浮点数线性映射转 16位无符号整数 (运控模式核心算法)
- */
-static uint16_t float_to_uint(float x, float x_min, float x_max, int bits) {
-    float span = x_max - x_min;
-    float offset = x - x_min;
+// ! ========================= 私 有 函 数 声 明 ========================= ! //
 
-    // 限幅保护，防止溢出
-    if(offset < 0) offset = 0;
-    if(offset > span) offset = span;
+static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits);
+static Rs06ServoStatus rs06_send(FDCAN_HandleTypeDef* hfdcan, uint32_t id, uint8_t data[8]);
 
-    return (uint16_t)((offset / span) * (float)((1 << bits) - 1));
+// ! ========================= 接 口 函 数 实 现 ========================= ! //
+
+#define X(name, value) case RS06_SERVO_STATUS_##name: return #name;
+const char* rs06_status_str(Rs06ServoStatus status) {
+    switch(status) {
+        RS06_SERVO_STATUS_TABLE
+        default: return "UNKNOWN";
+    }
 }
+#undef X
 
-/**
- * @brief  1. 使能电机
- * @param  hfdcan: CAN 句柄
- * @param  motor_id: 目标电机 ID
- */
-void RS06_Enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_ENABLE, RS06_HOST_ID, motor_id);
-    uint8_t data[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }; // 数据域全0
-    can_send(hfdcan, id, data, 8);
+#define Y(name, value) case RS06_SERVO_MODE_##name: return #name;
+const char* rs06_mode_str(Rs06ServoMode mode) {
+    switch(mode) {
+        RS06_SERVO_MODE_TABLE
+        default: return "UNKNOWN";
+    }
 }
+#undef Y
 
-/**
- * @brief  2. 停止/卸载电机
- */
-void RS06_Stop(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_STOP, RS06_HOST_ID, motor_id);
-    uint8_t data[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    can_send(hfdcan, id, data, 8);
-}
-
-/**
- * @brief  3. 修改电机 ID (需重启生效) [cite: 287]
- */
-void RS06_Change_ID(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id) {
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_SET_ID, new_id, old_id);
+Rs06ServoStatus rs06_enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_ENABLE, RS06_HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
-    can_send(hfdcan, id, data, 8);
+    return rs06_send(hfdcan, id, data);
 }
 
-
-
-/**
- * @brief  5. 运控模式指令：指定角度转动
- * @note   严格遵循说明书截图中的 16-12-12-12-12 位压缩格式
- * @param  hfdcan:      FDCAN 句柄
- * @param  motor_id:    目标电机 ID
- * @param  angle_rad:   目标位置 (P_des), 范围 RS06_P_MIN ~ RS06_P_MAX
- * @param  speed_rad_s: 目标速度 (V_des), 范围 RS06_V_MIN ~ RS06_V_MAX
- * @param  kp:          位置比例系数 (Kp), 范围 RS06_KP_MIN ~ RS06_KP_MAX
- * @param  kd:          速度比例系数 (Kd), 范围 RS06_KD_MIN ~ RS06_KD_MAX
- * @param  t_ff:        前馈扭矩 (T_ff), 建议范围 -36.0 到 36.0 (Nm)
- */
-void RS06_Set_Position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff) {
-
-    // 1. 根据你的宏定义计算 ID: (0x0100 << 16) | (0xFD << 8) | motor_id
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_RUN, RS06_HOST_ID, motor_id);
-
-    // 2. 将浮点数转换为特定位宽的无符号整数 (线性映射)
-    // 严格对应说明书：P(16bit), V(12bit), KP(12bit), KD(12bit), T(12bit)
-    uint16_t p_int = float_to_uint(angle_rad, RS06_P_MIN, RS06_P_MAX, 16);
-    uint16_t v_int = float_to_uint(speed_rad_s, RS06_V_MIN, RS06_V_MAX, 12);
-    uint16_t kp_int = float_to_uint(kp, RS06_KP_MIN, RS06_KP_MAX, 12);
-    uint16_t kd_int = float_to_uint(kd, RS06_KD_MIN, RS06_KD_MAX, 12);
-    uint16_t t_int = float_to_uint(t_ff, -36.0f, 36.0f, 12);
-
-    uint8_t data[8];
-
-    // 3. 严格按照 MIT 协议位域拼接逻辑填充 8 字节数据域
-    // Byte 0, 1: P_des (16位)
-    data[0] = (p_int >> 8) & 0xFF;                  // P 高 8 位
-    data[1] = p_int & 0xFF;                         // P 低 8 位
-
-    // Byte 2, 3: V_des (12位) + Kp (高 4 位)
-    data[2] = (v_int >> 4) & 0xFF;                  // V 高 8 位
-    data[3] = ((v_int & 0x0F) << 4) | ((kp_int >> 8) & 0x0F); // V 低 4 位 + Kp 高 4 位
-
-    // Byte 4, 5: Kp (低 8 位) + Kd (高 8 位)
-    data[4] = kp_int & 0xFF;                        // Kp 低 8 位
-    data[5] = (kd_int >> 4) & 0xFF;                 // Kd 高 8 位
-
-    // Byte 6, 7: Kd (低 4 位) + T_ff (12位)
-    data[6] = ((kd_int & 0x0F) << 4) | ((t_int >> 8) & 0x0F); // Kd 低 4 位 + T 高 4 位
-    data[7] = t_int & 0xFF;                         // T 低 8 位
-
-    // 4. 发送数据
-    // 由于 id = 0x0100FDxx > 0x7FF，你底层的 can_send 会自动选择 FDCAN_EXTENDED_ID
-    can_send(hfdcan, id, data, 8);
+Rs06ServoStatus rs06_stop(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_STOP, RS06_HOST_ID, motor_id);
+    uint8_t data[8] = { 0 };
+    return rs06_send(hfdcan, id, data);
 }
 
-/**
- * @brief  4. 设置电机运行模式 (通信类型 18 写入 0x7005) [cite: 290, 298]
- */
-void RS06_Set_Mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, uint8_t mode) {
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_WR_PARAM, RS06_HOST_ID, motor_id);
+Rs06ServoStatus rs06_change_id(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_SET_ID, new_id, old_id);
+    uint8_t data[8] = { 0 };
+    return rs06_send(hfdcan, id, data);
+}
+
+Rs06ServoStatus rs06_set_mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, Rs06ServoMode mode) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_WR_PARAM, RS06_HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
 
-    // 索引 0x7005 (小端)
     data[0] = RS06_PARAM_RUN_MODE & 0xFF;
     data[1] = (RS06_PARAM_RUN_MODE >> 8) & 0xFF;
+    data[4] = (uint8_t)mode;
 
-    // 数据域 (小端)
-    data[4] = mode;
-
-    can_send(hfdcan, id, data, 8);
+    return rs06_send(hfdcan, id, data);
 }
 
-/**
- * @brief  5. 发送绝对位置指令 (通信类型 18 写入 0x7016)
- * @note   舵轮控制核心函数！适用 PP 和 CSP 模式。
- */
-void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad) {
-    uint32_t id = RS06_EXT_ID(RS06_TYPE_WR_PARAM, RS06_HOST_ID, motor_id);
+Rs06ServoStatus rs06_set_position_target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_WR_PARAM, RS06_HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
 
-    // 索引 0x7016 (小端)
     data[0] = RS06_PARAM_LOC_REF & 0xFF;
     data[1] = (RS06_PARAM_LOC_REF >> 8) & 0xFF;
+    memcpy(&data[4], &angle_rad, sizeof(float));
 
-    // 拷贝 32位 float 内存数据到 CAN 帧中
-    memcpy(&data[4], &angle_rad, 4);
-
-    can_send(hfdcan, id, data, 8);
+    return rs06_send(hfdcan, id, data);
 }
 
-/**
- * @brief  7. 舵轮测试流程（标准 CSP 模式转动 90 度演示）
- */
-void RS06_turn(void) {
-    // RS06_Set_Mode(&hfdcan2, 0x05, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x05);
-    // RS06_Set_Position_Target(&hfdcan2, 0x05, -0.50f);
-    // delay_ms(1000);
-    // RS06_Stop(&hfdcan2,0x05);
+Rs06ServoStatus rs06_set_position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff) {
+    uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_RUN, RS06_HOST_ID, motor_id);
 
+    uint16_t p_int = rs06_float_to_u16(angle_rad, RS06_P_MIN, RS06_P_MAX, 16);
+    uint16_t v_int = rs06_float_to_u16(speed_rad_s, RS06_V_MIN, RS06_V_MAX, 12);
+    uint16_t kp_int = rs06_float_to_u16(kp, RS06_KP_MIN, RS06_KP_MAX, 12);
+    uint16_t kd_int = rs06_float_to_u16(kd, RS06_KD_MIN, RS06_KD_MAX, 12);
+    uint16_t t_int = rs06_float_to_u16(t_ff, -36.0f, 36.0f, 12);
 
-    // RS06_Set_Mode(&hfdcan2, 0x06, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x06);
-    // RS06_Set_Position_Target(&hfdcan2, 0x06, -2.00f);
-    // delay_ms(1000);
-    // RS06_Stop(&hfdcan2,0x06);
+    uint8_t data[8];
+    data[0] = (uint8_t)(p_int >> 8);
+    data[1] = (uint8_t)(p_int & 0xFF);
+    data[2] = (uint8_t)(v_int >> 4);
+    data[3] = (uint8_t)(((v_int & 0x0F) << 4) | ((kp_int >> 8) & 0x0F));
+    data[4] = (uint8_t)(kp_int & 0xFF);
+    data[5] = (uint8_t)(kd_int >> 4);
+    data[6] = (uint8_t)(((kd_int & 0x0F) << 4) | ((t_int >> 8) & 0x0F));
+    data[7] = (uint8_t)(t_int & 0xFF);
 
-    // RS06_Set_Mode(&hfdcan2, 0x07, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x07);
-    // RS06_Set_Position_Target(&hfdcan2, 0x07, -0.00f);
-    // delay_ms(1000);
-    // RS06_Stop(&hfdcan2,0x07);
+    return rs06_send(hfdcan, id, data);
+}
 
-    // RS06_Set_Mode(&hfdcan2, 0x08, RS06_MODE_PP); 
-    // RS06_Enable(&hfdcan2,0x08);
-    // RS06_Set_Position_Target(&hfdcan2, 0x08, -0.8f);
-    // delay_ms(1000);
-    // RS06_Stop(&hfdcan2,0x08);
+void rs06_turn(void) {
+    // 预留测试序列，按需启用。
+}
 
+// ! ========================= 私 有 函 数 实 现 ========================= ! //
+
+static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits) {
+    if(bits == 0 || max <= min) {
+        return 0;
+    }
+
+    if(val < min) {
+        val = min;
+    }
+    if(val > max) {
+        val = max;
+    }
+
+    float span = max - min;
+    float normalized = (val - min) / span;
+    uint32_t max_bits_val = (1UL << bits) - 1UL;
+
+    return (uint16_t)(normalized * (float)max_bits_val);
+}
+
+static Rs06ServoStatus rs06_send(FDCAN_HandleTypeDef* hfdcan, uint32_t id, uint8_t data[8]) {
+    if(hfdcan == NULL || data == NULL) {
+        return RS06_SERVO_STATUS_PARAM_INVALID;
+    }
+
+    can_send(hfdcan, id, data, 8);
+    return RS06_SERVO_STATUS_OK;
 }

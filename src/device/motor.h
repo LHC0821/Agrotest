@@ -1,99 +1,171 @@
-#ifndef __MOTOR_H
-#define __MOTOR_H
+#ifndef _motor_h_
+#define _motor_h_
 
-#include "main.h" // 包含 HAL 库相关定义
+#include "main.h"
 
-/* --- 宏定义 --- */
-#define SPEED_RPM_MAX   210
-#define SPEED_RPM_MIN  -210
+#include <stdbool.h>
+#include <stdint.h>
 
-extern TIM_HandleTypeDef htim4; 
-extern TIM_HandleTypeDef htim6;
-
-/* --- 结构体定义 --- */
+// ! ========================= 接 口 变 量 / Typedef 声 明 ========================= ! //
 
 /**
- * @brief 电机反馈数据解析结构体
+ * @brief 电机单例，用户自定义名称
+ */
+#define motor dm_motor_instance
+
+/**
+ * @brief 达妙电机状态码表，使用 X-Macro 定义，方便维护和扩展
+ */
+#define DM_MOTOR_STATUS_TABLE \
+    X(OK, 0) \
+    X(ERROR, 1) \
+    X(TIMEOUT, 2) \
+    X(ID_MISMATCH, 3)
+
+/**
+ * @brief 达妙电机模式表，使用 X-Macro 定义，方便维护和扩展
+ */
+#define DM_MOTOR_MODE_TABLE \
+    Y(MIT, 1) \
+    Y(POS_SPD, 2) \
+    Y(SPD, 3) \
+    Y(POS_SPD_CUR, 4)
+
+/**
+ * @brief 达妙电机状态码，由 X-Macro 自动生成枚举类型
+ */
+#define X(name, value) DM_MOTOR_##name = value,
+typedef enum {
+    DM_MOTOR_STATUS_TABLE
+} DmMotorStatus;
+#undef X
+
+/**
+ * @brief DmMotorMode 枚举类型，表示电机的工作模式
+ */
+#define Y(name, value) DM_MOTOR_MODE_##name = value,
+typedef enum {
+    DM_MOTOR_MODE_TABLE
+} DmMotorMode;
+#undef Y
+
+/**
+ * @brief 电机反馈信息结构体
  */
 typedef struct {
-    int16_t FBSpeed;   // 反馈转速
-    int16_t ECurru;    // 反馈电流
-    int16_t Position;  // 反馈位置
-    uint8_t ErrCode;   // 错误代码
-    uint8_t FBMode;    // 当前模式
-} reporter;
+    uint16_t id;
+    uint8_t err_code;
+    float pos;
+    float spd;
+    float torque;
+} DmMotorFeedback;
 
-/* --- 函数原型声明 --- */
+typedef struct {
+    int16_t fb_speed;
+    int16_t e_curru;
+    int16_t position;
+    uint8_t err_code;
+    uint8_t fb_mode;
+} DmMotorReport;
 
-/**
- * @brief 电机驱动及平滑算法初始化
- * @note 内部会自动启动定时器中断 (TIM6)
- */
-void Motor_Driver_Init(void);
-
-/**
- * @brief 设置电机反馈模式
- * @param FeedBack: 反馈指令
- * @param ID: 电机ID (1-8)
- */
-uint8_t Motor_Set_FeedBack(unsigned char FeedBack, uint8_t ID);
-
-/**
- * @brief 电机位置校准模式
- */
-void Motor_Calibration(void);
-
-/**
- * @brief 检查并解析电机反馈
- */
-void Ck_Check(uint8_t ID, uint8_t Check1, uint8_t Check2, uint8_t Check3, reporter* reporter);
+/// @brief 电机控制命令的长度，单位为字节
+#define DM_MOTOR_CMD_LEN 8
+/// @brief pos 上下限
+#define DM_MOTOR_POS_LIMIT 12.5f
+/// @brief spd 上下限
+#define DM_MOTOR_SPD_LIMIT 10.0f
+/// @brief torque 上下限
+#define DM_MOTOR_TORQUE_LIMIT 28.0f
+/// @brief kp 上限
+#define DM_MOTOR_KP_LIMIT 500.0f
+/// @brief kd 上限
+#define DM_MOTOR_KD_LIMIT 5.0f
 
 /**
- * @brief 直接解析报告模式数据
+ * @brief 电机接口结构体，包含所有电机相关的函数指针
  */
-void Obtain_Motor_Report(reporter* report);
+#define X(name, value) const DmMotorStatus name;
+#define Y(name, value) const DmMotorMode name;
+extern const struct DmMotorInterface {
+    struct {
+        DM_MOTOR_STATUS_TABLE
+    };
+    struct {
+        DM_MOTOR_MODE_TABLE
+    };
 
-/**
- * @brief 修改电机 ID (需单独连接电机时修改)
- */
-uint8_t ID_Set(uint8_t ID);
+    const char* (*status_str)(DmMotorStatus status);
+    const char* (*mode_str)(DmMotorMode mode);
 
-/**
- * @brief 修改电机运行模式
- */
-uint8_t Motor_SetMode(unsigned char Mode);
+    DmMotorStatus(*enable)(uint16_t id);
+    DmMotorStatus(*disable)(uint16_t id);
 
-/**
- * @brief 应用层普通控制函数 (直接改变速度，可能会有抖动)
- */
-void Motor_Speed_Control(int16_t InputRPM, uint8_t ID);
+    DmMotorStatus(*set_mit)(uint16_t id, float pos, float spd, float kp, float kd, float torque);
+    DmMotorStatus(*set_pos_spd)(uint16_t id, float pos, float spd);
+    DmMotorStatus(*set_spd)(uint16_t id, float spd);
+    DmMotorStatus(*set_pos_spd_cur)(uint16_t id, float pos, float spd, float cur);
 
-/**
- * @brief 同时控制 4 台电机的速度 (直接发送)
- */
-void Motor_Control_All(int16_t rpms[4]);
+    DmMotorStatus(*get_feedback)(uint16_t id, uint8_t feedback[8], uint32_t timeout_ms);
+    DmMotorStatus(*get_err_code)(uint16_t id, uint8_t* err_code, uint32_t timeout_ms);
+    DmMotorStatus(*get_pos)(uint16_t id, float* pos, uint32_t timeout_ms);
+    DmMotorStatus(*get_spd)(uint16_t id, float* spd, uint32_t timeout_ms);
+    DmMotorStatus(*get_torque)(uint16_t id, float* torque, uint32_t timeout_ms);
 
-/* --- 算法优化部分接口 --- */
+    DmMotorStatus(*request_feedback)(uint16_t id);
+    DmMotorStatus(*update)(DmMotorFeedback* feedback);
 
-/**
- * @brief 应用层平滑控制函数 (推荐使用)
- * @param InputRPM: 目标转速 (-210 到 210)
- * @param ID: 电机ID (1-4)
- */
-void Motor_Speed_Control_Smooth(int16_t InputRPM, uint8_t ID);
+    void (*init)(void);
+    DmMotorStatus(*set_feedback)(uint8_t feedback_cmd, uint8_t id);
+    void (*calibration)(void);
+    void (*check)(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3, DmMotorReport* report);
+    void (*obtain_report)(DmMotorReport* report);
+    DmMotorStatus(*set_id)(uint8_t id);
+    DmMotorStatus(*set_mode_raw)(uint8_t mode);
+    void (*speed_control)(int16_t input_rpm, uint8_t id);
+    void (*control_all)(int16_t rpms[4]);
+    void (*speed_control_smooth)(int16_t input_rpm, uint8_t id);
+    void (*stop_immediately)(uint8_t id);
+    void (*monitor_read)(void);
+} dm_motor_instance;
+#undef X
+#undef Y
 
-/**
- * @brief 电机紧急停止 (强制清零转速，跳过平滑斜坡)
- */
-void Motor_Stop_Immediately(uint8_t ID);
+// ! ========================= 接 口 函 数 声 明 ========================= ! //
 
-/**
- * @brief 定时器回调函数声明 (通常由 HAL 库内部调用，在此声明以防链接问题)
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs);
+const char* dm_status_str(DmMotorStatus status);
+const char* dm_mode_str(DmMotorMode mode);
 
-/*串口读取电机数据*/
-void App_Monitor_Read(void);
+DmMotorStatus dm_enable(uint16_t id);
+DmMotorStatus dm_disable(uint16_t id);
 
-#endif /* __MOTOR_H */
+DmMotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, float torque);
+DmMotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd);
+DmMotorStatus dm_set_spd(uint16_t id, float spd);
+DmMotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur);
+
+DmMotorStatus dm_get_feedback(uint16_t id, uint8_t feedback[8], uint32_t timeout_ms);
+DmMotorStatus dm_get_err_code(uint16_t id, uint8_t* err_code, uint32_t timeout_ms);
+DmMotorStatus dm_get_pos(uint16_t id, float* pos, uint32_t timeout_ms);
+DmMotorStatus dm_get_spd(uint16_t id, float* spd, uint32_t timeout_ms);
+DmMotorStatus dm_get_torque(uint16_t id, float* torque, uint32_t timeout_ms);
+
+DmMotorStatus dm_request_feedback(uint16_t id);
+DmMotorStatus dm_update(DmMotorFeedback* feedback);
+
+void dm_init(void);
+DmMotorStatus dm_set_feedback(uint8_t feedback_cmd, uint8_t id);
+void dm_calibration(void);
+void dm_check(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3, DmMotorReport* report);
+void dm_obtain_report(DmMotorReport* report);
+DmMotorStatus dm_set_id(uint8_t id);
+DmMotorStatus dm_set_mode_raw(uint8_t mode);
+void dm_speed_control(int16_t input_rpm, uint8_t id);
+void dm_control_all(int16_t rpms[4]);
+void dm_speed_control_smooth(int16_t input_rpm, uint8_t id);
+void dm_stop_immediately(uint8_t id);
+void dm_monitor_read(void);
+
+extern DmMotorReport dm_reporter_cache[4];
+extern uint8_t dm_query_id;
+
+#endif
