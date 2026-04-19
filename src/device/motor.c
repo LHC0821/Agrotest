@@ -36,7 +36,12 @@ const struct MotorInterface dm_motor_instance = {
     .set_speed = dm_motor_set_speed,
     .request_report = dm_motor_request_report,
     .update = dm_motor_update,
-    .latest_report = dm_motor_latest_report
+    .get_pos = dm_motor_get_pos,
+    .get_spd = dm_motor_get_spd,
+    .get_tor = dm_motor_get_tor,
+    .latest_report = dm_motor_latest_report,
+    .set_speed = dm_motor_set_speed,
+    .set_speed_rps = dm_motor_set_speed_rps
 };
 #undef SX
 
@@ -187,9 +192,22 @@ MotorStatus dm_motor_update(MotorFeedback* feedback) {
     }
 
     *feedback = g_motor_last_feedback;
+
     g_motor_has_new_feedback = 0U;
 
     return MOTOR_STATUS_OK;
+}
+
+float dm_motor_get_pos(uint8_t id) {
+    return (float)g_motor_last_feedback.pos;
+}
+
+float dm_motor_get_spd(uint8_t id) {
+    return (float)g_motor_last_feedback.spd;
+}
+
+float dm_motor_get_tor(uint8_t id) {
+    return (float)g_motor_last_feedback.torque;
 }
 
 MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report) {
@@ -236,6 +254,46 @@ static int16_t motor_rpm_to_protocol_speed(int16_t rpm) {
     }
 
     return (int16_t)scaled;
+}
+
+/**
+ * @brief 设置电机目标速度 (输入单位: RPS 转每秒)
+ * @param id 电机ID (1-8)
+ * @param rps 目标转速 (Revolutions Per Second)
+ * @return MotorStatus 状态码
+ */
+MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
+    int16_t rpm_target;
+    int16_t rpm_clamped;
+    int16_t speed_scaled;
+
+    if(!motor_id_is_valid(id)) {
+        return MOTOR_STATUS_PARAM_INVALID;
+    }
+
+    // 2. 单位转换: RPS -> RPM (1 rps = 60 rpm)
+    // 使用 +0.5f 实现浮点数转整数时的四舍五入，提高控制精度
+    if (rps >= 0.0f) {
+        rpm_target = (int16_t)(rps * 60.0f + 0.5f);
+    } else {
+        rpm_target = (int16_t)(rps * 60.0f - 0.5f);
+    }
+
+    // 3. 限速处理 (复用私有函数，确保不超过 MOTOR_RPM_MAX)
+    rpm_clamped = motor_clamp_rpm(rpm_target);
+
+    // 4. 协议缩放 (复用私有函数，执行 RPM * MOTOR_SPEED_SCALE 并限制在 +/-32767)
+    speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
+
+    // 5. 执行发送 
+    if(id >= 1U && id <= 4U){
+        motor_send_speed_scaled(MOTOR_CMD_SPEED_1_TO_4, speed_scaled);
+    }
+    else if(id >= 5U && id <= 8U){
+        motor_send_speed_scaled(MOTOR_CMD_SPEED_5_TO_8, speed_scaled);
+    }
+
+    return MOTOR_STATUS_OK;
 }
 
 static MotorStatus motor_start_fdcan(FDCAN_HandleTypeDef* hfdcan) {

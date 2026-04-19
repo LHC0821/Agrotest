@@ -26,7 +26,9 @@ const struct ServoInterface rs06_servo_instance = {
     .set_mode = rs06_set_mode,
     .set_position = rs06_set_position,
     .set_mit = rs06_set_mit,
-    .turn = rs06_turn
+    .reset = rs06_reset,
+    .config_reporting = rs06_config_reporting,
+    .parse_feedback = rs06_parse_feedback
 };
 #undef SX
 #undef MX
@@ -76,7 +78,7 @@ const char* rs06_mode_str(ServoMode mode) {
 
 ServoStatus rs06_enable(uint8_t motor_id) {
     uint32_t id = EXT_ID(SERVO_TYPE_ENABLE, HOST_ID, motor_id);
-    uint8_t data[8] = { 0 };
+    uint8_t data[8] = { 0 };          
     return rs06_send(id, data);
 }
 
@@ -136,9 +138,46 @@ ServoStatus rs06_set_mit(uint8_t motor_id, float angle_rad, float speed_rad_s, f
     return rs06_send(id, data);
 }
 
-void rs06_turn(void) {
-    // 预留测试序列，按需启用。
+
+
+void rs06_reset(void) {
+    // 回归零位
 }
+
+/**
+ * @brief 设置主动上报周期 (新增)
+ */
+ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
+    uint32_t id = EXT_ID(SERVO_TYPE_WR_PARAM, HOST_ID, motor_id);
+    uint8_t data[8] = { 0 };
+    data[0] = PARAM_FEEDBACK_MS & 0xFF;
+    data[1] = (PARAM_FEEDBACK_MS >> 8) & 0xFF;
+    uint32_t val = (uint32_t)interval_ms;
+    memcpy(&data[4], &val, sizeof(uint32_t));
+    return rs06_send(id, data);
+}
+
+/**
+ * @brief 解析主动上报帧 (新增)
+ */
+ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
+    if (res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
+    uint16_t msg_type = (uint16_t)((id >> 16) & 0xFFFF);
+    if (msg_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
+
+    res->motor_id = (uint8_t)(id & 0xFF);
+    uint16_t p_raw = (uint16_t)((data[0] << 8) | data[1]);
+    uint16_t v_raw = (uint16_t)((data[2] << 8) | data[3]);
+    uint16_t t_raw = (uint16_t)((data[4] << 8) | data[5]);
+
+    res->position    = rs06_u16_to_float(p_raw, P_MIN, P_MAX, 16);
+    res->velocity    = rs06_u16_to_float(v_raw, V_MIN, V_MAX, 16);
+    res->torque      = rs06_u16_to_float(t_raw, T_MIN, T_MAX, 16);
+    res->temperature = data[6];
+    res->error_code  = data[7];
+    return SERVO_STATUS_OK;
+}
+
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
 
