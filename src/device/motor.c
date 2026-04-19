@@ -9,16 +9,14 @@
 
 // ! ========================= 变 量 声 明 ========================= ! //
 
-const struct DmMotorInterface dm_motor_instance = {
+#define DSX(name, value) .name = DM_MOTOR_##name,
+#define DMX(name, value) .name = DM_MOTOR_MODE_##name,
+const struct MotorInterface motor_instance = {
     {
-#define X(name, value) .name = DM_MOTOR_##name,
         DM_MOTOR_STATUS_TABLE
-#undef X
     },
     {
-#define Y(name, value) .name = DM_MOTOR_MODE_##name,
         DM_MOTOR_MODE_TABLE
-#undef Y
     },
     .status_str = dm_status_str,
     .mode_str = dm_mode_str,
@@ -48,8 +46,10 @@ const struct DmMotorInterface dm_motor_instance = {
     .stop_immediately = dm_stop_immediately,
     .monitor_read = dm_monitor_read
 };
+#undef DSX
+#undef DMX
 
-DmMotorReport dm_reporter_cache[4];
+MotorReport dm_reporter_cache[4];
 uint8_t dm_query_id = 1;
 
 static uint8_t g_dm_last_feedback[DM_MOTOR_CMD_LEN];
@@ -67,10 +67,10 @@ static MotorSmoothCtrl g_motor_states[4];
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
-static DmMotorStatus dm_can_send(uint16_t id, uint8_t data[8]);
-static DmMotorStatus dm_can_rcvd(uint8_t buffer[8]);
+static MotorStatus dm_can_send(uint16_t id, uint8_t data[8]);
+static MotorStatus dm_can_rcvd(uint8_t buffer[8]);
 static void dm_write_register(uint16_t id, uint8_t rid, uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3);
-static void dm_switch_mode(uint16_t id, DmMotorMode mode);
+static void dm_switch_mode(uint16_t id, MotorMode mode);
 static uint16_t dm_f32_to_u16(float val, float min, float max, uint8_t bits);
 static float dm_u16_to_f32(uint16_t val, float min, float max, uint8_t bits);
 
@@ -79,35 +79,35 @@ static void motor_drive_direct(int16_t input_rpm, uint8_t id);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-#define X(name, value) case DM_MOTOR_##name: return #name;
-const char* dm_status_str(DmMotorStatus status) {
+#define DSX(name, value) case DM_MOTOR_##name: return #name;
+const char* dm_status_str(MotorStatus status) {
     switch(status) {
         DM_MOTOR_STATUS_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef X
+#undef DSX
 
-#define Y(name, value) case DM_MOTOR_MODE_##name: return #name;
-const char* dm_mode_str(DmMotorMode mode) {
+#define DMX(name, value) case DM_MOTOR_MODE_##name: return #name;
+const char* dm_mode_str(MotorMode mode) {
     switch(mode) {
         DM_MOTOR_MODE_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef Y
+#undef DMX
 
-DmMotorStatus dm_enable(uint16_t id) {
+MotorStatus dm_enable(uint16_t id) {
     uint8_t data[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC };
     return dm_can_send(id, data);
 }
 
-DmMotorStatus dm_disable(uint16_t id) {
+MotorStatus dm_disable(uint16_t id) {
     uint8_t data[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFD };
     return dm_can_send(id, data);
 }
 
-DmMotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, float torque) {
+MotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, float torque) {
     dm_switch_mode(id, DM_MOTOR_MODE_MIT);
 
     uint16_t pos_bits = dm_f32_to_u16(pos, -DM_MOTOR_POS_LIMIT, DM_MOTOR_POS_LIMIT, 16);
@@ -129,7 +129,7 @@ DmMotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, 
     return dm_can_send(id, data);
 }
 
-DmMotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd) {
+MotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd) {
     dm_switch_mode(id, DM_MOTOR_MODE_POS_SPD);
 
     uint16_t target_id = (uint16_t)(id + 0x100);
@@ -140,7 +140,7 @@ DmMotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd) {
     return dm_can_send(target_id, data);
 }
 
-DmMotorStatus dm_set_spd(uint16_t id, float spd) {
+MotorStatus dm_set_spd(uint16_t id, float spd) {
     dm_switch_mode(id, DM_MOTOR_MODE_SPD);
 
     uint16_t target_id = (uint16_t)(id + 0x200);
@@ -150,7 +150,7 @@ DmMotorStatus dm_set_spd(uint16_t id, float spd) {
     return dm_can_send(target_id, data);
 }
 
-DmMotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur) {
+MotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur) {
     dm_switch_mode(id, DM_MOTOR_MODE_POS_SPD_CUR);
 
     uint16_t target_id = (uint16_t)(id + 0x300);
@@ -167,7 +167,7 @@ DmMotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur) {
     return dm_can_send(target_id, data);
 }
 
-DmMotorStatus dm_get_feedback(uint16_t id, uint8_t feedback[8], uint32_t timeout_ms) {
+MotorStatus dm_get_feedback(uint16_t id, uint8_t feedback[8], uint32_t timeout_ms) {
     if(feedback == NULL) {
         return DM_MOTOR_ERROR;
     }
@@ -192,13 +192,13 @@ DmMotorStatus dm_get_feedback(uint16_t id, uint8_t feedback[8], uint32_t timeout
     return DM_MOTOR_TIMEOUT;
 }
 
-DmMotorStatus dm_get_err_code(uint16_t id, uint8_t* err_code, uint32_t timeout_ms) {
+MotorStatus dm_get_err_code(uint16_t id, uint8_t* err_code, uint32_t timeout_ms) {
     if(err_code == NULL) {
         return DM_MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
-    DmMotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
+    MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
     if(result != DM_MOTOR_OK) {
         return result;
     }
@@ -207,13 +207,13 @@ DmMotorStatus dm_get_err_code(uint16_t id, uint8_t* err_code, uint32_t timeout_m
     return DM_MOTOR_OK;
 }
 
-DmMotorStatus dm_get_pos(uint16_t id, float* pos, uint32_t timeout_ms) {
+MotorStatus dm_get_pos(uint16_t id, float* pos, uint32_t timeout_ms) {
     if(pos == NULL) {
         return DM_MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
-    DmMotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
+    MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
     if(result != DM_MOTOR_OK) {
         return result;
     }
@@ -223,13 +223,13 @@ DmMotorStatus dm_get_pos(uint16_t id, float* pos, uint32_t timeout_ms) {
     return DM_MOTOR_OK;
 }
 
-DmMotorStatus dm_get_spd(uint16_t id, float* spd, uint32_t timeout_ms) {
+MotorStatus dm_get_spd(uint16_t id, float* spd, uint32_t timeout_ms) {
     if(spd == NULL) {
         return DM_MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
-    DmMotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
+    MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
     if(result != DM_MOTOR_OK) {
         return result;
     }
@@ -239,13 +239,13 @@ DmMotorStatus dm_get_spd(uint16_t id, float* spd, uint32_t timeout_ms) {
     return DM_MOTOR_OK;
 }
 
-DmMotorStatus dm_get_torque(uint16_t id, float* torque, uint32_t timeout_ms) {
+MotorStatus dm_get_torque(uint16_t id, float* torque, uint32_t timeout_ms) {
     if(torque == NULL) {
         return DM_MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
-    DmMotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
+    MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
     if(result != DM_MOTOR_OK) {
         return result;
     }
@@ -255,7 +255,7 @@ DmMotorStatus dm_get_torque(uint16_t id, float* torque, uint32_t timeout_ms) {
     return DM_MOTOR_OK;
 }
 
-DmMotorStatus dm_request_feedback(uint16_t id) {
+MotorStatus dm_request_feedback(uint16_t id) {
     uint8_t can_id_l = (uint8_t)(id & 0xFF);
     uint8_t can_id_h = (uint8_t)((id >> 8) & 0x07);
     uint8_t req_data[8] = { can_id_l, can_id_h, 0xCC, 0x00, 0, 0, 0, 0 };
@@ -263,7 +263,7 @@ DmMotorStatus dm_request_feedback(uint16_t id) {
     return dm_can_send(0x7FF, req_data);
 }
 
-DmMotorStatus dm_update(DmMotorFeedback* feedback) {
+MotorStatus dm_update(MotorFeedback* feedback) {
     if(feedback == NULL) {
         return DM_MOTOR_ERROR;
     }
@@ -310,7 +310,7 @@ void dm_init(void) {
     HAL_TIM_Base_Start_IT(&htim6);
 }
 
-DmMotorStatus dm_set_feedback(uint8_t feedback_cmd, uint8_t id) {
+MotorStatus dm_set_feedback(uint8_t feedback_cmd, uint8_t id) {
     uint8_t data[8] = { 0 };
     if(id > 0 && id <= 8) {
         data[id - 1] = feedback_cmd;
@@ -323,7 +323,7 @@ void dm_calibration(void) {
     dm_can_send(0x104, data);
 }
 
-void dm_check(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3, DmMotorReport* report) {
+void dm_check(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3, MotorReport* report) {
     uint8_t tx_buf[8] = { id, check1, check2, check3, 0xAA, 0, 0, 0 };
     dm_can_send(0x107, tx_buf);
 
@@ -332,7 +332,7 @@ void dm_check(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3, DmMoto
     }
 }
 
-void dm_obtain_report(DmMotorReport* report) {
+void dm_obtain_report(MotorReport* report) {
     if(report == NULL) {
         return;
     }
@@ -344,13 +344,13 @@ void dm_obtain_report(DmMotorReport* report) {
     report->fb_mode = g_dm_last_feedback[7];
 }
 
-DmMotorStatus dm_set_id(uint8_t id) {
+MotorStatus dm_set_id(uint8_t id) {
     uint8_t data[8] = { 0 };
     data[0] = id;
     return dm_can_send(0x108, data);
 }
 
-DmMotorStatus dm_set_mode_raw(uint8_t mode) {
+MotorStatus dm_set_mode_raw(uint8_t mode) {
     uint8_t data[8] = { 0 };
     data[0] = mode;
     return dm_can_send(0x105, data);
@@ -389,13 +389,13 @@ void dm_stop_immediately(uint8_t id) {
 }
 
 void dm_monitor_read(void) {
-    DmMotorFeedback fb;
+    MotorFeedback fb;
     if(dm_update(&fb) != DM_MOTOR_OK) {
         return;
     }
 
     if(fb.id >= 1 && fb.id <= 4) {
-        DmMotorReport* cache = &dm_reporter_cache[fb.id - 1];
+        MotorReport* cache = &dm_reporter_cache[fb.id - 1];
         cache->fb_speed = (int16_t)(fb.spd * 100.0f);
         cache->e_curru = (int16_t)(fb.torque * 100.0f);
         cache->position = (int16_t)(fb.pos * 100.0f);
@@ -446,7 +446,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs)
     }
 
     if(dm_query_id >= 1 && dm_query_id <= 4) {
-        DmMotorReport* cache = &dm_reporter_cache[dm_query_id - 1];
+        MotorReport* cache = &dm_reporter_cache[dm_query_id - 1];
         cache->fb_speed = (int16_t)((g_dm_last_feedback[0] << 8) | g_dm_last_feedback[1]);
         cache->position = (int16_t)((g_dm_last_feedback[2] << 8) | g_dm_last_feedback[3]);
         cache->err_code = g_dm_last_feedback[4];
@@ -455,7 +455,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs)
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
 
-static DmMotorStatus dm_can_send(uint16_t id, uint8_t data[8]) {
+static MotorStatus dm_can_send(uint16_t id, uint8_t data[8]) {
     if(data == NULL) {
         return DM_MOTOR_ERROR;
     }
@@ -465,7 +465,7 @@ static DmMotorStatus dm_can_send(uint16_t id, uint8_t data[8]) {
     return DM_MOTOR_OK;
 }
 
-static DmMotorStatus dm_can_rcvd(uint8_t buffer[8]) {
+static MotorStatus dm_can_rcvd(uint8_t buffer[8]) {
     if(buffer == NULL) {
         return DM_MOTOR_ERROR;
     }
@@ -499,7 +499,7 @@ static void dm_write_register(uint16_t id, uint8_t rid, uint8_t d0, uint8_t d1, 
     dm_can_send(0x7FF, data);
 }
 
-static void dm_switch_mode(uint16_t id, DmMotorMode mode) {
+static void dm_switch_mode(uint16_t id, MotorMode mode) {
     dm_write_register(id, 10, (uint8_t)mode, 0, 0, 0);
     delay_ms(1);
 }

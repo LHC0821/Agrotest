@@ -5,9 +5,9 @@
 
 // ! ========================= 变 量 声 明 ========================= ! //
 
-#define X(name, value) .name = RS06_SERVO_STATUS_##name,
-#define Y(name, value) .name = RS06_SERVO_MODE_##name,
-#define Z(name, value) .name = RS06_SERVO_TYPE_##name,
+#define RSX(name, value) .name = RS06_SERVO_STATUS_##name,
+#define RMX(name, value) .name = RS06_SERVO_MODE_##name,
+#define RTX(name, value) .name = RS06_SERVO_TYPE_##name,
 const struct Rs06ServoInterface rs06_servo_instance = {
     {
         RS06_SERVO_STATUS_TABLE
@@ -28,9 +28,9 @@ const struct Rs06ServoInterface rs06_servo_instance = {
     .set_position = rs06_set_position,
     .turn = rs06_turn
 };
-#undef X
-#undef Y
-#undef Z
+#undef RSX
+#undef RMX
+#undef RTX
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
@@ -39,23 +39,23 @@ static Rs06ServoStatus rs06_send(FDCAN_HandleTypeDef* hfdcan, uint32_t id, uint8
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-#define X(name, value) case RS06_SERVO_STATUS_##name: return #name;
+#define RSX(name, value) case RS06_SERVO_STATUS_##name: return #name;
 const char* rs06_status_str(Rs06ServoStatus status) {
     switch(status) {
         RS06_SERVO_STATUS_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef X
+#undef RSX
 
-#define Y(name, value) case RS06_SERVO_MODE_##name: return #name;
+#define RMX(name, value) case RS06_SERVO_MODE_##name: return #name;
 const char* rs06_mode_str(Rs06ServoMode mode) {
     switch(mode) {
         RS06_SERVO_MODE_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef Y
+#undef RMX
 
 Rs06ServoStatus rs06_enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
     uint32_t id = RS06_EXT_ID(RS06_SERVO_TYPE_ENABLE, RS06_HOST_ID, motor_id);

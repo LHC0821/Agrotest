@@ -29,45 +29,45 @@
 #define RS06_KD_MAX 100.0f
 
 #define RS06_SERVO_STATUS_TABLE \
-	X(OK, 0) \
-	X(ERROR, 1) \
-	X(TIMEOUT, 2) \
-	X(PARAM_INVALID, 3)
+	RSX(OK, 0) \
+	RSX(ERROR, 1) \
+	RSX(TIMEOUT, 2) \
+	RSX(PARAM_INVALID, 3)
 
 #define RS06_SERVO_MODE_TABLE \
-	Y(MIT, 0) \
-	Y(PP, 1) \
-	Y(CSP, 5)
+	RMX(MIT, 0) \
+	RMX(PP, 1) \
+	RMX(CSP, 5)
 
 #define RS06_SERVO_TYPE_TABLE \
-	Z(RUN, 0x0100) \
-	Z(ENABLE, 0x0300) \
-	Z(STOP, 0x0400) \
-	Z(SET_ZERO, 0x0600) \
-	Z(SET_ID, 0x0701) \
-	Z(WR_PARAM, 0x1200)
+	RTX(RUN, 0x0100) \
+	RTX(ENABLE, 0x0300) \
+	RTX(STOP, 0x0400) \
+	RTX(SET_ZERO, 0x0600) \
+	RTX(SET_ID, 0x0701) \
+	RTX(WR_PARAM, 0x1200)
 
-#define X(name, value) RS06_SERVO_STATUS_##name = value,
+#define RSX(name, value) RS06_SERVO_STATUS_##name = value,
 typedef enum {
     RS06_SERVO_STATUS_TABLE
 } Rs06ServoStatus;
-#undef X
+#undef RSX
 
-#define Y(name, value) RS06_SERVO_MODE_##name = value,
+#define RMX(name, value) RS06_SERVO_MODE_##name = value,
 typedef enum {
     RS06_SERVO_MODE_TABLE
 } Rs06ServoMode;
-#undef Y
+#undef RMX
 
-#define Z(name, value) RS06_SERVO_TYPE_##name = value,
+#define RTX(name, value) RS06_SERVO_TYPE_##name = value,
 typedef enum {
     RS06_SERVO_TYPE_TABLE
 } Rs06ServoType;
-#undef Z
+#undef RTX
 
-#define X(name, value) const Rs06ServoStatus name;
-#define Y(name, value) const Rs06ServoMode name;
-#define Z(name, value) const Rs06ServoType name;
+#define RSX(name, value) const Rs06ServoStatus name;
+#define RMX(name, value) const Rs06ServoMode name;
+#define RTX(name, value) const Rs06ServoType name;
 extern const struct Rs06ServoInterface {
     struct {
         RS06_SERVO_STATUS_TABLE
@@ -90,9 +90,9 @@ extern const struct Rs06ServoInterface {
     Rs06ServoStatus(*set_position)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
     void (*turn)(void);
 } rs06_servo_instance;
-#undef X
-#undef Y
-#undef Z
+#undef RSX
+#undef RMX
+#undef RTX
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 

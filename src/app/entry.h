@@ -39,7 +39,7 @@ static uint8_t current = 0;
 static uint8_t last_key_state = 0; // 用于存储上一次按键状态，实现边沿检测
 
 extern uint8_t dm_query_id;
-extern DmMotorReport dm_reporter_cache[4];
+extern MotorReport dm_reporter_cache[4];
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
