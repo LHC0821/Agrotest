@@ -36,6 +36,9 @@ const struct MotorInterface dm_motor_instance = {
     .set_speed = dm_motor_set_speed,
     .request_report = dm_motor_request_report,
     .update = dm_motor_update,
+    .get_pos = dm_motor_get_pos,
+    .get_spd = dm_motor_get_spd,
+    .get_tor = dm_motor_get_tor,
     .latest_report = dm_motor_latest_report
 };
 #undef SX
@@ -187,9 +190,22 @@ MotorStatus dm_motor_update(MotorFeedback* feedback) {
     }
 
     *feedback = g_motor_last_feedback;
+
     g_motor_has_new_feedback = 0U;
 
     return MOTOR_STATUS_OK;
+}
+
+float dm_motor_get_pos(uint8_t id) {
+    return (float)g_motor_last_feedback.pos;
+}
+
+float dm_motor_get_spd(uint8_t id) {
+    return (float)g_motor_last_feedback.spd;
+}
+
+float dm_motor_get_tor(uint8_t id) {
+    return (float)g_motor_last_feedback.torque;
 }
 
 MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report) {
