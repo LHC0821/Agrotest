@@ -10,7 +10,6 @@
 #include "gpio.h"   // IWYU pragma: keep
 
 // #include <stdio.h>
-#include <string.h>
 
 // ! 平 台 层 ! //
 #include "key.h"
@@ -20,6 +19,7 @@
 #include "delay.h"
 
 // ! 领 域 层 ! //
+#include "AGV_Chassis.h"
 
 
 // ! 设 备 层 ! //
@@ -38,18 +38,12 @@
 static uint8_t current = 0;
 static uint8_t last_key_state = 0; // 用于存储上一次按键状态，实现边沿检测
 
-extern uint8_t dm_query_id;
-extern MotorReport dm_reporter_cache[4];
-
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
 static inline void entry_init(void) {
     motor.init();
     servo.init(&hfdcan1);
-
-    memset(dm_reporter_cache, 0, sizeof(dm_reporter_cache));
-
-    HAL_TIM_Base_Start_IT(&htim15);
+    Chassis_Init();
 
     delay_ms_init(HAL_GetTick);
 
@@ -64,10 +58,10 @@ static inline void entry_loop(void) {
     }
     last_key_state = key_now;
     if(current == 0) {
-        motor.speed_control_smooth(0, 0x01);
+        Chassis_Set_WheelSpeedSmooth(1, 0);
     }
     else {
-        motor.speed_control_smooth(100, 0x01);
+        Chassis_Set_WheelSpeedSmooth(1, 100);
     }
 }
 
