@@ -1,5 +1,5 @@
-#ifndef __RS06_H__
-#define __RS06_H__
+#ifndef __SERVO_H__
+#define __SERVO_H__
 
 #include "main.h"
 #include "fdcan.h" // 依赖你的 FDCAN 配置
