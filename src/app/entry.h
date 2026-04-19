@@ -56,7 +56,7 @@ static inline void entry_init(void) {
 }
 
 static inline void entry_loop(void) {
-    uint8_t key_now = Key_Scan();
+    uint8_t key_now = key_scan();
     if(key_now == 1 && last_key_state == 0) {
         current = !current;
     }

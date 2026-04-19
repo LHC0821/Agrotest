@@ -3,6 +3,6 @@
 
 #include "stm32h7xx_hal.h"
 
-uint8_t Key_Scan(void);
-	
+uint8_t key_scan(void);
+
 #endif

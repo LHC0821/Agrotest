@@ -28,12 +28,11 @@ const struct Rs06ServoInterface rs06_servo_instance = {
     .set_position = rs06_set_position,
     .turn = rs06_turn
 };
-
-const struct Rs06ServoInterface* servo_instance = &rs06_servo_instance;
-
 #undef SX
 #undef MX
 #undef TX
+
+const struct Rs06ServoInterface* servo_instance = &rs06_servo_instance;
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
