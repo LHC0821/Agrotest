@@ -10,73 +10,73 @@
 /**
  * @brief 舵机单例，用户自定义名称
  */
-#define servo rs06_servo_instance
+#define servo (*servo_instance)
 
-#define RS06_HOST_ID 0xFD
-#define RS06_EXT_ID(type, host, motor) (((uint32_t)(type) << 16) | ((uint32_t)(host) << 8) | ((uint32_t)(motor)))
+#define HOST_ID 0xFD
+#define EXT_ID(type, host, motor) (((uint32_t)(type) << 16) | ((uint32_t)(host) << 8) | ((uint32_t)(motor)))
 
-#define RS06_PARAM_RUN_MODE 0x7005
-#define RS06_PARAM_LOC_REF 0x7016
-#define RS06_PARAM_LIMIT_SPD 0x7017
+#define PARAM_RUN_MODE 0x7005
+#define PARAM_LOC_REF 0x7016
+#define PARAM_LIMIT_SPD 0x7017
 
-#define RS06_P_MIN -12.57f
-#define RS06_P_MAX 12.57f
-#define RS06_V_MIN -50.0f
-#define RS06_V_MAX 50.0f
-#define RS06_KP_MIN 0.0f
-#define RS06_KP_MAX 5000.0f
-#define RS06_KD_MIN 0.0f
-#define RS06_KD_MAX 100.0f
+#define P_MIN -12.57f
+#define P_MAX 12.57f
+#define V_MIN -50.0f
+#define V_MAX 50.0f
+#define KP_MIN 0.0f
+#define KP_MAX 5000.0f
+#define KD_MIN 0.0f
+#define KD_MAX 100.0f
 
-#define RS06_SERVO_STATUS_TABLE \
-	RSX(OK, 0) \
-	RSX(ERROR, 1) \
-	RSX(TIMEOUT, 2) \
-	RSX(PARAM_INVALID, 3)
+#define SERVO_STATUS_TABLE \
+	SX(OK, 0) \
+	SX(ERROR, 1) \
+	SX(TIMEOUT, 2) \
+	SX(PARAM_INVALID, 3)
 
-#define RS06_SERVO_MODE_TABLE \
-	RMX(MIT, 0) \
-	RMX(PP, 1) \
-	RMX(CSP, 5)
+#define SERVO_MODE_TABLE \
+	MX(MIT, 0) \
+	MX(PP, 1) \
+	MX(CSP, 5)
 
-#define RS06_SERVO_TYPE_TABLE \
-	RTX(RUN, 0x0100) \
-	RTX(ENABLE, 0x0300) \
-	RTX(STOP, 0x0400) \
-	RTX(SET_ZERO, 0x0600) \
-	RTX(SET_ID, 0x0701) \
-	RTX(WR_PARAM, 0x1200)
+#define SERVO_TYPE_TABLE \
+	TX(RUN, 0x0100) \
+	TX(ENABLE, 0x0300) \
+	TX(STOP, 0x0400) \
+	TX(SET_ZERO, 0x0600) \
+	TX(SET_ID, 0x0701) \
+	TX(WR_PARAM, 0x1200)
 
-#define RSX(name, value) RS06_SERVO_STATUS_##name = value,
+#define SX(name, value) SERVO_STATUS_##name = value,
 typedef enum {
-    RS06_SERVO_STATUS_TABLE
+    SERVO_STATUS_TABLE
 } Rs06ServoStatus;
-#undef RSX
+#undef SX
 
-#define RMX(name, value) RS06_SERVO_MODE_##name = value,
+#define MX(name, value) SERVO_MODE_##name = value,
 typedef enum {
-    RS06_SERVO_MODE_TABLE
+    SERVO_MODE_TABLE
 } Rs06ServoMode;
-#undef RMX
+#undef MX
 
-#define RTX(name, value) RS06_SERVO_TYPE_##name = value,
+#define TX(name, value) SERVO_TYPE_##name = value,
 typedef enum {
-    RS06_SERVO_TYPE_TABLE
+    SERVO_TYPE_TABLE
 } Rs06ServoType;
-#undef RTX
+#undef TX
 
-#define RSX(name, value) const Rs06ServoStatus name;
-#define RMX(name, value) const Rs06ServoMode name;
-#define RTX(name, value) const Rs06ServoType name;
+#define SX(name, value) const Rs06ServoStatus name;
+#define MX(name, value) const Rs06ServoMode name;
+#define TX(name, value) const Rs06ServoType name;
 extern const struct Rs06ServoInterface {
     struct {
-        RS06_SERVO_STATUS_TABLE
+        SERVO_STATUS_TABLE
     };
     struct {
-        RS06_SERVO_MODE_TABLE
+        SERVO_MODE_TABLE
     };
     struct {
-        RS06_SERVO_TYPE_TABLE
+        SERVO_TYPE_TABLE
     };
 
     const char* (*status_str)(Rs06ServoStatus status);
@@ -89,12 +89,16 @@ extern const struct Rs06ServoInterface {
     Rs06ServoStatus(*set_position_target)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad);
     Rs06ServoStatus(*set_position)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
     void (*turn)(void);
-} rs06_servo_instance;
-#undef RSX
-#undef RMX
-#undef RTX
+}*servo_instance;
+#undef SX
+#undef MX
+#undef TX
+
+extern const struct Rs06ServoInterface rs06_servo_instance;
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
+
+void servo_set_instance(const struct Rs06ServoInterface* instance);
 
 const char* rs06_status_str(Rs06ServoStatus status);
 const char* rs06_mode_str(Rs06ServoMode mode);

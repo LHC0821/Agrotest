@@ -11,43 +11,43 @@
 /**
  * @brief 电机单例，用户自定义名称
  */
-#define motor motor_instance
+#define motor (*motor_instance)
 
 /**
- * @brief 达妙电机状态码表，使用 DSX-Macro 定义，方便维护和扩展
+ * @brief 达妙电机状态码表，使用 SX-Macro 定义，方便维护和扩展
  */
-#define DM_MOTOR_STATUS_TABLE \
-    DSX(OK, 0) \
-    DSX(ERROR, 1) \
-    DSX(TIMEOUT, 2) \
-    DSX(ID_MISMATCH, 3)
+#define MOTOR_STATUS_TABLE \
+    SX(OK, 0) \
+    SX(ERROR, 1) \
+    SX(TIMEOUT, 2) \
+    SX(ID_MISMATCH, 3)
 
 /**
- * @brief 达妙电机模式表，使用 DSX-Macro 定义，方便维护和扩展
+ * @brief 达妙电机模式表，使用 SX-Macro 定义，方便维护和扩展
  */
-#define DM_MOTOR_MODE_TABLE \
-    DMX(MIT, 1) \
-    DMX(POS_SPD, 2) \
-    DMX(SPD, 3) \
-    DMX(POS_SPD_CUR, 4)
+#define MOTOR_MODE_TABLE \
+    MX(MIT, 1) \
+    MX(POS_SPD, 2) \
+    MX(SPD, 3) \
+    MX(POS_SPD_CUR, 4)
 
 /**
- * @brief 达妙电机状态码，由 DSX-Macro 自动生成枚举类型
+ * @brief 达妙电机状态码，由 SX-Macro 自动生成枚举类型
  */
-#define DSX(name, value) DM_MOTOR_##name = value,
+#define SX(name, value) MOTOR_##name = value,
 typedef enum {
-    DM_MOTOR_STATUS_TABLE
+    MOTOR_STATUS_TABLE
 } MotorStatus;
-#undef DSX
+#undef SX
 
 /**
  * @brief MotorMode 枚举类型，表示电机的工作模式
  */
-#define DMX(name, value) DM_MOTOR_MODE_##name = value,
+#define MX(name, value) MOTOR_MODE_##name = value,
 typedef enum {
-    DM_MOTOR_MODE_TABLE
+    MOTOR_MODE_TABLE
 } MotorMode;
-#undef DMX
+#undef MX
 
 /**
  * @brief 电机反馈信息结构体
@@ -69,29 +69,29 @@ typedef struct {
 } MotorReport;
 
 /// @brief 电机控制命令的长度，单位为字节
-#define DM_MOTOR_CMD_LEN 8
+#define MOTOR_CMD_LEN 8
 /// @brief pos 上下限
-#define DM_MOTOR_POS_LIMIT 12.5f
+#define MOTOR_POS_LIMIT 12.5f
 /// @brief spd 上下限
-#define DM_MOTOR_SPD_LIMIT 10.0f
+#define MOTOR_SPD_LIMIT 10.0f
 /// @brief torque 上下限
-#define DM_MOTOR_TORQUE_LIMIT 28.0f
+#define MOTOR_TORQUE_LIMIT 28.0f
 /// @brief kp 上限
-#define DM_MOTOR_KP_LIMIT 500.0f
+#define MOTOR_KP_LIMIT 500.0f
 /// @brief kd 上限
-#define DM_MOTOR_KD_LIMIT 5.0f
+#define MOTOR_KD_LIMIT 5.0f
 
 /**
  * @brief 电机接口结构体，包含所有电机相关的函数指针
  */
-#define DSX(name, value) const MotorStatus name;
-#define DMX(name, value) const MotorMode name;
+#define SX(name, value) const MotorStatus name;
+#define MX(name, value) const MotorMode name;
 extern const struct MotorInterface {
     struct {
-        DM_MOTOR_STATUS_TABLE
+        MOTOR_STATUS_TABLE
     };
     struct {
-        DM_MOTOR_MODE_TABLE
+        MOTOR_MODE_TABLE
     };
 
     const char* (*status_str)(MotorStatus status);
@@ -126,11 +126,15 @@ extern const struct MotorInterface {
     void (*speed_control_smooth)(int16_t input_rpm, uint8_t id);
     void (*stop_immediately)(uint8_t id);
     void (*monitor_read)(void);
-} motor_instance;
-#undef DSX
-#undef DMX
+}*motor_instance;
+#undef SX
+#undef MX
+
+extern const struct MotorInterface dm_motor_instance;
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
+
+void motor_set_instance(const struct MotorInterface* instance);
 
 const char* dm_status_str(MotorStatus status);
 const char* dm_mode_str(MotorMode mode);

@@ -9,14 +9,14 @@
 
 // ! ========================= 变 量 声 明 ========================= ! //
 
-#define DSX(name, value) .name = DM_MOTOR_##name,
-#define DMX(name, value) .name = DM_MOTOR_MODE_##name,
-const struct MotorInterface motor_instance = {
+#define SX(name, value) .name = MOTOR_##name,
+#define MX(name, value) .name = MOTOR_MODE_##name,
+const struct MotorInterface dm_motor_instance = {
     {
-        DM_MOTOR_STATUS_TABLE
+        MOTOR_STATUS_TABLE
     },
     {
-        DM_MOTOR_MODE_TABLE
+        MOTOR_MODE_TABLE
     },
     .status_str = dm_status_str,
     .mode_str = dm_mode_str,
@@ -46,13 +46,15 @@ const struct MotorInterface motor_instance = {
     .stop_immediately = dm_stop_immediately,
     .monitor_read = dm_monitor_read
 };
-#undef DSX
-#undef DMX
+#undef SX
+#undef MX
+
+const struct MotorInterface* motor_instance = &dm_motor_instance;
 
 MotorReport dm_reporter_cache[4];
 uint8_t dm_query_id = 1;
 
-static uint8_t g_dm_last_feedback[DM_MOTOR_CMD_LEN];
+static uint8_t g_dm_last_feedback[MOTOR_CMD_LEN];
 
 static uint8_t g_motor_tx_0x32[8] = { 0 };
 static uint8_t g_motor_tx_0x33[8] = { 0 };
@@ -79,23 +81,29 @@ static void motor_drive_direct(int16_t input_rpm, uint8_t id);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-#define DSX(name, value) case DM_MOTOR_##name: return #name;
+void motor_set_instance(const struct MotorInterface* instance) {
+    if(instance != NULL) {
+        motor_instance = instance;
+    }
+}
+
+#define SX(name, value) case MOTOR_##name: return #name;
 const char* dm_status_str(MotorStatus status) {
     switch(status) {
-        DM_MOTOR_STATUS_TABLE
+        MOTOR_STATUS_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef DSX
+#undef SX
 
-#define DMX(name, value) case DM_MOTOR_MODE_##name: return #name;
+#define MX(name, value) case MOTOR_MODE_##name: return #name;
 const char* dm_mode_str(MotorMode mode) {
     switch(mode) {
-        DM_MOTOR_MODE_TABLE
+        MOTOR_MODE_TABLE
         default: return "UNKNOWN";
     }
 }
-#undef DMX
+#undef MX
 
 MotorStatus dm_enable(uint16_t id) {
     uint8_t data[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC };
@@ -108,13 +116,13 @@ MotorStatus dm_disable(uint16_t id) {
 }
 
 MotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, float torque) {
-    dm_switch_mode(id, DM_MOTOR_MODE_MIT);
+    dm_switch_mode(id, MOTOR_MODE_MIT);
 
-    uint16_t pos_bits = dm_f32_to_u16(pos, -DM_MOTOR_POS_LIMIT, DM_MOTOR_POS_LIMIT, 16);
-    uint16_t spd_bits = dm_f32_to_u16(spd, -DM_MOTOR_SPD_LIMIT, DM_MOTOR_SPD_LIMIT, 12);
-    uint16_t kp_bits = dm_f32_to_u16(kp, 0.0f, DM_MOTOR_KP_LIMIT, 12);
-    uint16_t kd_bits = dm_f32_to_u16(kd, 0.0f, DM_MOTOR_KD_LIMIT, 12);
-    uint16_t torque_bits = dm_f32_to_u16(torque, -DM_MOTOR_TORQUE_LIMIT, DM_MOTOR_TORQUE_LIMIT, 12);
+    uint16_t pos_bits = dm_f32_to_u16(pos, -MOTOR_POS_LIMIT, MOTOR_POS_LIMIT, 16);
+    uint16_t spd_bits = dm_f32_to_u16(spd, -MOTOR_SPD_LIMIT, MOTOR_SPD_LIMIT, 12);
+    uint16_t kp_bits = dm_f32_to_u16(kp, 0.0f, MOTOR_KP_LIMIT, 12);
+    uint16_t kd_bits = dm_f32_to_u16(kd, 0.0f, MOTOR_KD_LIMIT, 12);
+    uint16_t torque_bits = dm_f32_to_u16(torque, -MOTOR_TORQUE_LIMIT, MOTOR_TORQUE_LIMIT, 12);
 
     uint8_t data[8];
     data[0] = (uint8_t)(pos_bits >> 8);
@@ -130,7 +138,7 @@ MotorStatus dm_set_mit(uint16_t id, float pos, float spd, float kp, float kd, fl
 }
 
 MotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd) {
-    dm_switch_mode(id, DM_MOTOR_MODE_POS_SPD);
+    dm_switch_mode(id, MOTOR_MODE_POS_SPD);
 
     uint16_t target_id = (uint16_t)(id + 0x100);
     uint8_t data[8];
@@ -141,7 +149,7 @@ MotorStatus dm_set_pos_spd(uint16_t id, float pos, float spd) {
 }
 
 MotorStatus dm_set_spd(uint16_t id, float spd) {
-    dm_switch_mode(id, DM_MOTOR_MODE_SPD);
+    dm_switch_mode(id, MOTOR_MODE_SPD);
 
     uint16_t target_id = (uint16_t)(id + 0x200);
     uint8_t data[8] = { 0 };
@@ -151,7 +159,7 @@ MotorStatus dm_set_spd(uint16_t id, float spd) {
 }
 
 MotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur) {
-    dm_switch_mode(id, DM_MOTOR_MODE_POS_SPD_CUR);
+    dm_switch_mode(id, MOTOR_MODE_POS_SPD_CUR);
 
     uint16_t target_id = (uint16_t)(id + 0x300);
     uint16_t spd_scaled = (uint16_t)(spd * 100.0f);
@@ -169,90 +177,90 @@ MotorStatus dm_set_pos_spd_cur(uint16_t id, float pos, float spd, float cur) {
 
 MotorStatus dm_get_feedback(uint16_t id, uint8_t feedback[8], uint32_t timeout_ms) {
     if(feedback == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t can_id_l = (uint8_t)(id & 0xFF);
     uint8_t can_id_h = (uint8_t)((id >> 8) & 0x07);
     uint8_t req_data[8] = { can_id_l, can_id_h, 0xCC, 0x00, 0, 0, 0, 0 };
 
-    if(dm_can_send(0x7FF, req_data) != DM_MOTOR_OK) {
-        return DM_MOTOR_ERROR;
+    if(dm_can_send(0x7FF, req_data) != MOTOR_OK) {
+        return MOTOR_ERROR;
     }
 
     ms_t start = HAL_GetTick();
     while((HAL_GetTick() - start) < timeout_ms) {
-        if(dm_can_rcvd(feedback) == DM_MOTOR_OK) {
+        if(dm_can_rcvd(feedback) == MOTOR_OK) {
             uint8_t expected_id = (uint8_t)(can_id_l & 0x0F);
             uint8_t received_id = (uint8_t)(feedback[0] & 0x0F);
-            return (expected_id == received_id) ? DM_MOTOR_OK : DM_MOTOR_ID_MISMATCH;
+            return (expected_id == received_id) ? MOTOR_OK : MOTOR_ID_MISMATCH;
         }
     }
 
-    return DM_MOTOR_TIMEOUT;
+    return MOTOR_TIMEOUT;
 }
 
 MotorStatus dm_get_err_code(uint16_t id, uint8_t* err_code, uint32_t timeout_ms) {
     if(err_code == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
     MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
-    if(result != DM_MOTOR_OK) {
+    if(result != MOTOR_OK) {
         return result;
     }
 
     *err_code = (uint8_t)(feedback[0] >> 4);
-    return DM_MOTOR_OK;
+    return MOTOR_OK;
 }
 
 MotorStatus dm_get_pos(uint16_t id, float* pos, uint32_t timeout_ms) {
     if(pos == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
     MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
-    if(result != DM_MOTOR_OK) {
+    if(result != MOTOR_OK) {
         return result;
     }
 
     uint16_t pos_bits = (uint16_t)(((uint16_t)feedback[1] << 8) | feedback[2]);
-    *pos = dm_u16_to_f32(pos_bits, -DM_MOTOR_POS_LIMIT, DM_MOTOR_POS_LIMIT, 16);
-    return DM_MOTOR_OK;
+    *pos = dm_u16_to_f32(pos_bits, -MOTOR_POS_LIMIT, MOTOR_POS_LIMIT, 16);
+    return MOTOR_OK;
 }
 
 MotorStatus dm_get_spd(uint16_t id, float* spd, uint32_t timeout_ms) {
     if(spd == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
     MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
-    if(result != DM_MOTOR_OK) {
+    if(result != MOTOR_OK) {
         return result;
     }
 
     uint16_t spd_bits = (uint16_t)(((uint16_t)feedback[3] << 4) | ((uint16_t)(feedback[4] & 0xF0) >> 4));
-    *spd = dm_u16_to_f32(spd_bits, -DM_MOTOR_SPD_LIMIT, DM_MOTOR_SPD_LIMIT, 12);
-    return DM_MOTOR_OK;
+    *spd = dm_u16_to_f32(spd_bits, -MOTOR_SPD_LIMIT, MOTOR_SPD_LIMIT, 12);
+    return MOTOR_OK;
 }
 
 MotorStatus dm_get_torque(uint16_t id, float* torque, uint32_t timeout_ms) {
     if(torque == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t feedback[8];
     MotorStatus result = dm_get_feedback(id, feedback, timeout_ms);
-    if(result != DM_MOTOR_OK) {
+    if(result != MOTOR_OK) {
         return result;
     }
 
     uint16_t torque_bits = (uint16_t)((((uint16_t)feedback[4] & 0x0F) << 8) | feedback[5]);
-    *torque = dm_u16_to_f32(torque_bits, -DM_MOTOR_TORQUE_LIMIT, DM_MOTOR_TORQUE_LIMIT, 12);
-    return DM_MOTOR_OK;
+    *torque = dm_u16_to_f32(torque_bits, -MOTOR_TORQUE_LIMIT, MOTOR_TORQUE_LIMIT, 12);
+    return MOTOR_OK;
 }
 
 MotorStatus dm_request_feedback(uint16_t id) {
@@ -265,22 +273,22 @@ MotorStatus dm_request_feedback(uint16_t id) {
 
 MotorStatus dm_update(MotorFeedback* feedback) {
     if(feedback == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     uint8_t raw_feedback[8];
-    if(dm_can_rcvd(raw_feedback) != DM_MOTOR_OK) {
-        return DM_MOTOR_TIMEOUT;
+    if(dm_can_rcvd(raw_feedback) != MOTOR_OK) {
+        return MOTOR_TIMEOUT;
     }
 
     uint8_t id = (uint8_t)(raw_feedback[0] & 0x0F);
     uint8_t err_code = (uint8_t)(raw_feedback[0] >> 4);
     uint16_t pos_bits = (uint16_t)(((uint16_t)raw_feedback[1] << 8) | raw_feedback[2]);
-    float pos = dm_u16_to_f32(pos_bits, -DM_MOTOR_POS_LIMIT, DM_MOTOR_POS_LIMIT, 16);
+    float pos = dm_u16_to_f32(pos_bits, -MOTOR_POS_LIMIT, MOTOR_POS_LIMIT, 16);
     uint16_t spd_bits = (uint16_t)(((uint16_t)raw_feedback[3] << 4) | ((uint16_t)(raw_feedback[4] & 0xF0) >> 4));
-    float spd = dm_u16_to_f32(spd_bits, -DM_MOTOR_SPD_LIMIT, DM_MOTOR_SPD_LIMIT, 12);
+    float spd = dm_u16_to_f32(spd_bits, -MOTOR_SPD_LIMIT, MOTOR_SPD_LIMIT, 12);
     uint16_t torque_bits = (uint16_t)((((uint16_t)raw_feedback[4] & 0x0F) << 8) | raw_feedback[5]);
-    float torque = dm_u16_to_f32(torque_bits, -DM_MOTOR_TORQUE_LIMIT, DM_MOTOR_TORQUE_LIMIT, 12);
+    float torque = dm_u16_to_f32(torque_bits, -MOTOR_TORQUE_LIMIT, MOTOR_TORQUE_LIMIT, 12);
 
     feedback->id = id;
     feedback->err_code = err_code;
@@ -288,9 +296,9 @@ MotorStatus dm_update(MotorFeedback* feedback) {
     feedback->spd = spd;
     feedback->torque = torque;
 
-    memcpy(g_dm_last_feedback, raw_feedback, DM_MOTOR_CMD_LEN);
+    memcpy(g_dm_last_feedback, raw_feedback, MOTOR_CMD_LEN);
 
-    return DM_MOTOR_OK;
+    return MOTOR_OK;
 }
 
 void dm_init(void) {
@@ -390,7 +398,7 @@ void dm_stop_immediately(uint8_t id) {
 
 void dm_monitor_read(void) {
     MotorFeedback fb;
-    if(dm_update(&fb) != DM_MOTOR_OK) {
+    if(dm_update(&fb) != MOTOR_OK) {
         return;
     }
 
@@ -457,38 +465,38 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs)
 
 static MotorStatus dm_can_send(uint16_t id, uint8_t data[8]) {
     if(data == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
-    can_send(&hfdcan1, id, data, DM_MOTOR_CMD_LEN);
+    can_send(&hfdcan1, id, data, MOTOR_CMD_LEN);
     delay_ms(1);
-    return DM_MOTOR_OK;
+    return MOTOR_OK;
 }
 
 static MotorStatus dm_can_rcvd(uint8_t buffer[8]) {
     if(buffer == NULL) {
-        return DM_MOTOR_ERROR;
+        return MOTOR_ERROR;
     }
 
     if(HAL_FDCAN_GetRxFifoFillLevel(&hfdcan1, FDCAN_RX_FIFO0) == 0U) {
-        return DM_MOTOR_TIMEOUT;
+        return MOTOR_TIMEOUT;
     }
 
     FDCAN_RxHeaderTypeDef rx_header;
     if(HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &rx_header, buffer) != HAL_OK) {
-        return DM_MOTOR_TIMEOUT;
+        return MOTOR_TIMEOUT;
     }
 
     uint16_t data_len = get_fdcan_data_size(rx_header.DataLength);
-    if(data_len > DM_MOTOR_CMD_LEN) {
-        data_len = DM_MOTOR_CMD_LEN;
+    if(data_len > MOTOR_CMD_LEN) {
+        data_len = MOTOR_CMD_LEN;
     }
-    if(data_len < DM_MOTOR_CMD_LEN) {
-        memset(&buffer[data_len], 0, DM_MOTOR_CMD_LEN - data_len);
+    if(data_len < MOTOR_CMD_LEN) {
+        memset(&buffer[data_len], 0, MOTOR_CMD_LEN - data_len);
     }
 
-    memcpy(g_dm_last_feedback, buffer, DM_MOTOR_CMD_LEN);
-    return DM_MOTOR_OK;
+    memcpy(g_dm_last_feedback, buffer, MOTOR_CMD_LEN);
+    return MOTOR_OK;
 }
 
 static void dm_write_register(uint16_t id, uint8_t rid, uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3) {
