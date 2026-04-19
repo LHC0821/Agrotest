@@ -50,25 +50,25 @@
 #define SX(name, value) SERVO_STATUS_##name = value,
 typedef enum {
     SERVO_STATUS_TABLE
-} Rs06ServoStatus;
+} ServoStatus;
 #undef SX
 
 #define MX(name, value) SERVO_MODE_##name = value,
 typedef enum {
     SERVO_MODE_TABLE
-} Rs06ServoMode;
+} ServoMode;
 #undef MX
 
 #define TX(name, value) SERVO_TYPE_##name = value,
 typedef enum {
     SERVO_TYPE_TABLE
-} Rs06ServoType;
+} ServoType;
 #undef TX
 
-#define SX(name, value) const Rs06ServoStatus name;
-#define MX(name, value) const Rs06ServoMode name;
-#define TX(name, value) const Rs06ServoType name;
-extern const struct Rs06ServoInterface {
+#define SX(name, value) const ServoStatus name;
+#define MX(name, value) const ServoMode name;
+#define TX(name, value) const ServoType name;
+extern const struct ServoInterface {
     struct {
         SERVO_STATUS_TABLE
     };
@@ -79,36 +79,39 @@ extern const struct Rs06ServoInterface {
         SERVO_TYPE_TABLE
     };
 
-    const char* (*status_str)(Rs06ServoStatus status);
-    const char* (*mode_str)(Rs06ServoMode mode);
+    const char* (*status_str)(ServoStatus status);
+    const char* (*mode_str)(ServoMode mode);
 
-    Rs06ServoStatus(*enable)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
-    Rs06ServoStatus(*stop)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
-    Rs06ServoStatus(*change_id)(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id);
-    Rs06ServoStatus(*set_mode)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, Rs06ServoMode mode);
-    Rs06ServoStatus(*set_position_target)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad);
-    Rs06ServoStatus(*set_position)(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
+    ServoStatus(*init)(FDCAN_HandleTypeDef* hfdcan);
+    ServoStatus(*enable)(uint8_t motor_id);
+    ServoStatus(*stop)(uint8_t motor_id);
+    ServoStatus(*change_id)(uint8_t old_id, uint8_t new_id);
+    ServoStatus(*set_mode)(uint8_t motor_id, ServoMode mode);
+    ServoStatus(*set_position)(uint8_t motor_id, float angle_rad);
+    ServoStatus(*set_mit)(uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
     void (*turn)(void);
 }*servo_instance;
 #undef SX
 #undef MX
 #undef TX
 
-extern const struct Rs06ServoInterface rs06_servo_instance;
+extern const struct ServoInterface rs06_servo_instance;
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
-void servo_set_instance(const struct Rs06ServoInterface* instance);
+void servo_set_instance(const struct ServoInterface* instance);
 
-const char* rs06_status_str(Rs06ServoStatus status);
-const char* rs06_mode_str(Rs06ServoMode mode);
+ServoStatus rs06_init(FDCAN_HandleTypeDef* hfdcan);
 
-Rs06ServoStatus rs06_enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
-Rs06ServoStatus rs06_stop(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
-Rs06ServoStatus rs06_change_id(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id);
-Rs06ServoStatus rs06_set_mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, Rs06ServoMode mode);
-Rs06ServoStatus rs06_set_position_target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad);
-Rs06ServoStatus rs06_set_position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
+const char* rs06_status_str(ServoStatus status);
+const char* rs06_mode_str(ServoMode mode);
+
+ServoStatus rs06_enable(uint8_t motor_id);
+ServoStatus rs06_stop(uint8_t motor_id);
+ServoStatus rs06_change_id(uint8_t old_id, uint8_t new_id);
+ServoStatus rs06_set_mode(uint8_t motor_id, ServoMode mode);
+ServoStatus rs06_set_position(uint8_t motor_id, float angle_rad);
+ServoStatus rs06_set_mit(uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
 void rs06_turn(void);
 
 #endif

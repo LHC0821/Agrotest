@@ -8,7 +8,7 @@
 #define SX(name, value) .name = SERVO_STATUS_##name,
 #define MX(name, value) .name = SERVO_MODE_##name,
 #define TX(name, value) .name = SERVO_TYPE_##name,
-const struct Rs06ServoInterface rs06_servo_instance = {
+const struct ServoInterface rs06_servo_instance = {
     {
         SERVO_STATUS_TABLE
     },
@@ -24,31 +24,40 @@ const struct Rs06ServoInterface rs06_servo_instance = {
     .stop = rs06_stop,
     .change_id = rs06_change_id,
     .set_mode = rs06_set_mode,
-    .set_position_target = rs06_set_position_target,
     .set_position = rs06_set_position,
+    .set_mit = rs06_set_mit,
     .turn = rs06_turn
 };
 #undef SX
 #undef MX
 #undef TX
 
-const struct Rs06ServoInterface* servo_instance = &rs06_servo_instance;
+const struct ServoInterface* servo_instance = &rs06_servo_instance;
+
+static FDCAN_HandleTypeDef* servo_can;
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
 static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits);
-static Rs06ServoStatus rs06_send(FDCAN_HandleTypeDef* hfdcan, uint32_t id, uint8_t data[8]);
+static ServoStatus rs06_send(uint32_t id, uint8_t data[8]);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-void servo_set_instance(const struct Rs06ServoInterface* instance) {
+void servo_set_instance(const struct ServoInterface* instance) {
     if(instance != NULL) {
         servo_instance = instance;
     }
 }
 
+ServoStatus rs06_init(FDCAN_HandleTypeDef* hfdcan) {
+    if(hfdcan == NULL) return servo.PARAM_INVALID;
+
+    servo_can = hfdcan;
+    return servo.OK;
+}
+
 #define SX(name, value) case SERVO_STATUS_##name: return #name;
-const char* rs06_status_str(Rs06ServoStatus status) {
+const char* rs06_status_str(ServoStatus status) {
     switch(status) {
         SERVO_STATUS_TABLE
         default: return "UNKNOWN";
@@ -57,7 +66,7 @@ const char* rs06_status_str(Rs06ServoStatus status) {
 #undef SX
 
 #define MX(name, value) case SERVO_MODE_##name: return #name;
-const char* rs06_mode_str(Rs06ServoMode mode) {
+const char* rs06_mode_str(ServoMode mode) {
     switch(mode) {
         SERVO_MODE_TABLE
         default: return "UNKNOWN";
@@ -65,25 +74,25 @@ const char* rs06_mode_str(Rs06ServoMode mode) {
 }
 #undef MX
 
-Rs06ServoStatus rs06_enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+ServoStatus rs06_enable(uint8_t motor_id) {
     uint32_t id = EXT_ID(SERVO_TYPE_ENABLE, HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
-Rs06ServoStatus rs06_stop(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+ServoStatus rs06_stop(uint8_t motor_id) {
     uint32_t id = EXT_ID(SERVO_TYPE_STOP, HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
-Rs06ServoStatus rs06_change_id(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id) {
+ServoStatus rs06_change_id(uint8_t old_id, uint8_t new_id) {
     uint32_t id = EXT_ID(SERVO_TYPE_SET_ID, new_id, old_id);
     uint8_t data[8] = { 0 };
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
-Rs06ServoStatus rs06_set_mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, Rs06ServoMode mode) {
+ServoStatus rs06_set_mode(uint8_t motor_id, ServoMode mode) {
     uint32_t id = EXT_ID(SERVO_TYPE_WR_PARAM, HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
 
@@ -91,10 +100,10 @@ Rs06ServoStatus rs06_set_mode(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, Rs0
     data[1] = (PARAM_RUN_MODE >> 8) & 0xFF;
     data[4] = (uint8_t)mode;
 
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
-Rs06ServoStatus rs06_set_position_target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad) {
+ServoStatus rs06_set_position(uint8_t motor_id, float angle_rad) {
     uint32_t id = EXT_ID(SERVO_TYPE_WR_PARAM, HOST_ID, motor_id);
     uint8_t data[8] = { 0 };
 
@@ -102,10 +111,10 @@ Rs06ServoStatus rs06_set_position_target(FDCAN_HandleTypeDef* hfdcan, uint8_t mo
     data[1] = (PARAM_LOC_REF >> 8) & 0xFF;
     memcpy(&data[4], &angle_rad, sizeof(float));
 
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
-Rs06ServoStatus rs06_set_position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff) {
+ServoStatus rs06_set_mit(uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff) {
     uint32_t id = EXT_ID(SERVO_TYPE_RUN, HOST_ID, motor_id);
 
     uint16_t p_int = rs06_float_to_u16(angle_rad, P_MIN, P_MAX, 16);
@@ -124,7 +133,7 @@ Rs06ServoStatus rs06_set_position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id,
     data[6] = (uint8_t)(((kd_int & 0x0F) << 4) | ((t_int >> 8) & 0x0F));
     data[7] = (uint8_t)(t_int & 0xFF);
 
-    return rs06_send(hfdcan, id, data);
+    return rs06_send(id, data);
 }
 
 void rs06_turn(void) {
@@ -152,11 +161,11 @@ static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits)
     return (uint16_t)(normalized * (float)max_bits_val);
 }
 
-static Rs06ServoStatus rs06_send(FDCAN_HandleTypeDef* hfdcan, uint32_t id, uint8_t data[8]) {
-    if(hfdcan == NULL || data == NULL) {
+static ServoStatus rs06_send(uint32_t id, uint8_t data[8]) {
+    if(data == NULL) {
         return SERVO_STATUS_PARAM_INVALID;
     }
 
-    can_send(hfdcan, id, data, 8);
+    can_send(servo_can, id, data, 8);
     return SERVO_STATUS_OK;
 }

@@ -136,7 +136,7 @@ static void control_wheel(uint8_t id) {
     int16_t rpm = limit_rpm(rpm_float);
 
     // ���Ƶ��
-    servo.set_position(&hfdcan1, id + 1, target_angle, 2.0f, RS06_KP, RS06_KD, 0);
+    servo.set_mit(id + 1, target_angle, 2.0f, RS06_KP, RS06_KD, 0);
     motor.speed_control_smooth(rpm, id + 1);
 }
 

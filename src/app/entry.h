@@ -45,6 +45,8 @@ extern MotorReport dm_reporter_cache[4];
 
 static inline void entry_init(void) {
     motor.init();
+    servo.init(&hfdcan1);
+
     memset(dm_reporter_cache, 0, sizeof(dm_reporter_cache));
 
     HAL_TIM_Base_Start_IT(&htim15);
