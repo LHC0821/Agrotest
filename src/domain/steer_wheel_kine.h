@@ -28,9 +28,6 @@ typedef struct {
     float max_wheel_linear_speed;
 } SteerWheelModel;
 
-
-
-
 typedef struct {
     WheelModule wheels[4];
     float vx;

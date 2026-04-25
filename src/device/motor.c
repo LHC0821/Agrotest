@@ -193,9 +193,22 @@ MotorStatus dm_motor_update(MotorFeedback* feedback) {
 
     *feedback = g_motor_last_feedback;
 
+
     g_motor_has_new_feedback = 0U;
 
     return MOTOR_STATUS_OK;
+}
+
+float dm_motor_get_pos(uint8_t id) {
+    return (float)g_motor_last_feedback.pos;
+}
+
+float dm_motor_get_spd(uint8_t id) {
+    return (float)g_motor_last_feedback.spd;
+}
+
+float dm_motor_get_tor(uint8_t id) {
+    return (float)g_motor_last_feedback.torque;
 }
 
 float dm_motor_get_pos(uint8_t id) {
