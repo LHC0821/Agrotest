@@ -136,9 +136,8 @@ ChassisControllerStatus agro_chassis_controller_update(void) {
     }
     else if(is_wheels_changed(&steer_wheel, &last_steer_wheel)) {
         for(uint8_t i = 0x01; i < 0x04; i++) {
-            // TODO: 发送新的转向角度和轮速到舵机
             servo.set_position(i, steer_wheel.control.wheels[i].steer_angle);
-            // motor.set_speed
+            motor.set_speed_rads(i, steer_wheel.control.wheels[i].wheel_omega);
         }
     }
 

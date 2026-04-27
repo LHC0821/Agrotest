@@ -102,7 +102,7 @@ extern const struct ServoInterface {
     ServoStatus(*set_position)(uint8_t motor_id, float angle_rad);
     ServoStatus(*set_mit)(uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
     void (*reset)(void);
-    
+
     // ! ========================= 新 增 接口 ========================= ! //
     ServoStatus(*config_reporting)(uint8_t motor_id, uint16_t interval_ms);
     ServoStatus(*parse_feedback)(uint32_t id, uint8_t data[8], ServoFeedback* res);

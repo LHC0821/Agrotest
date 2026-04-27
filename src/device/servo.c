@@ -79,7 +79,7 @@ const char* rs06_mode_str(ServoMode mode) {
 
 ServoStatus rs06_enable(uint8_t motor_id) {
     uint32_t id = EXT_ID(SERVO_TYPE_ENABLE, HOST_ID, motor_id);
-    uint8_t data[8] = { 0 };          
+    uint8_t data[8] = { 0 };
     return rs06_send(id, data);
 }
 
@@ -178,9 +178,9 @@ ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res
     uint16_t v_raw = (uint16_t)((data[2] << 8) | data[3]);
     uint16_t t_raw = (uint16_t)((data[4] << 8) | data[5]);
 
-    res->position    = rs06_u16_to_float(p_raw, P_MIN, P_MAX, 16);
-    res->velocity    = rs06_u16_to_float(v_raw, V_MIN, V_MAX, 16);
-    res->torque      = rs06_u16_to_float(t_raw, T_MIN, T_MAX, 16);
+    res->position = rs06_u16_to_float(p_raw, P_MIN, P_MAX, 16);
+    res->velocity = rs06_u16_to_float(v_raw, V_MIN, V_MAX, 16);
+    res->torque = rs06_u16_to_float(t_raw, T_MIN, T_MAX, 16);
     res->temperature = data[6];
     res->error_code  = data[7];
 
@@ -238,10 +238,10 @@ static float rs06_u16_to_float(uint16_t val, float min, float max, uint8_t bits)
     if(bits == 0 || max <= min) {
         return 0.0f;
     }
-    
+
     uint32_t max_bits_val = (1UL << bits) - 1UL;
     float span = max - min;
     float normalized = (float)val / (float)max_bits_val;
-    
+
     return min + (normalized * span);
 }
