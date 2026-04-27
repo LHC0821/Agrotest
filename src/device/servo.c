@@ -157,14 +157,23 @@ ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
 }
 
 /**
- * @brief 解析主动上报帧 (新增)
+ * @brief 解析主动上报帧 (已针对协议修正)
+ * 修改点：
+ * 1. res->motor_id 的提取改为从 bits 8-15 提取（发送源 ID）。
+ * 2. msg_type 的判断改为提取 bits 24-28（指令模式位）。
  */
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
     if (res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
-    uint16_t msg_type = (uint16_t)((id >> 16) & 0xFFFF);
-    if (msg_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
 
-    res->motor_id = (uint8_t)(id & 0xFF);
+    // 修改部分 1：指令类型判断 (CMD位在 28-24 位）
+    uint8_t cmd_type = (uint8_t)((id >> 24) & 0x1F); 
+    if (cmd_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
+
+    // 修改部分 2：电机 ID 提取
+    // 在电机主动回传时，电机 ID 位于 bits 8-15 (Source ID 区域)
+    res->motor_id = (uint8_t)((id >> 8) & 0xFF);
+
+    // 以下保持您的原始数据解析逻辑不变
     uint16_t p_raw = (uint16_t)((data[0] << 8) | data[1]);
     uint16_t v_raw = (uint16_t)((data[2] << 8) | data[3]);
     uint16_t t_raw = (uint16_t)((data[4] << 8) | data[5]);
@@ -174,9 +183,22 @@ ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res
     res->torque      = rs06_u16_to_float(t_raw, T_MIN, T_MAX, 16);
     res->temperature = data[6];
     res->error_code  = data[7];
+
     return SERVO_STATUS_OK;
 }
 
+extern ServoFeedback g_latest_servo_data;
+
+ServoStatus servo_get_feedback_data(ServoFeedback* out_data) {
+    if (out_data == NULL) return SERVO_STATUS_PARAM_INVALID;
+    
+    // 为了防止读取时被中断修改导致数据错位，可以使用简单的关中断保护
+    __disable_irq(); 
+    *out_data = g_latest_servo_data;
+    __enable_irq();
+    
+    return SERVO_STATUS_OK;
+}
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
 
