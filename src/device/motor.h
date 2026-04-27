@@ -63,7 +63,7 @@ extern const struct MotorInterface {
     MotorStatus(*set_speed)(uint8_t id, int16_t rpm);
     MotorStatus(*set_speed_rps)(uint8_t id, float rps);
     MotorStatus(*request_report)(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3);
-    MotorStatus(*update)(MotorFeedback* feedback);
+    MotorStatus(*get_feedback)(MotorFeedback* feedback);
     MotorStatus(*set_speed_rads)(uint8_t id, float rads);
     float(*get_pos)(uint8_t id);
     float(*get_spd)(uint8_t id);
@@ -93,7 +93,7 @@ MotorStatus dm_motor_set_speed(uint8_t id, int16_t rpm);
 MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps);
 MotorStatus dm_motor_set_speed_rads(uint8_t id, float rads);
 MotorStatus dm_motor_request_report(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3);
-MotorStatus dm_motor_update(MotorFeedback* feedback);
+MotorStatus dm_motor_get_feedback(MotorFeedback* feedback);
 float dm_motor_get_pos(uint8_t id);
 float dm_motor_get_spd(uint8_t id);
 float dm_motor_get_tor(uint8_t id);

@@ -37,7 +37,7 @@ const struct MotorInterface dm_motor_instance = {
     .set_mode_raw = dm_motor_set_mode_raw,
     .set_speed = dm_motor_set_speed,
     .request_report = dm_motor_request_report,
-    .update = dm_motor_update,
+    .get_feedback = dm_motor_get_feedback,
     .get_pos = dm_motor_get_pos,
     .get_spd = dm_motor_get_spd,
     .get_tor = dm_motor_get_tor,
@@ -186,7 +186,7 @@ MotorStatus dm_motor_request_report(uint8_t id, uint8_t check1, uint8_t check2, 
     return MOTOR_STATUS_OK;
 }
 
-MotorStatus dm_motor_update(MotorFeedback* feedback) {
+MotorStatus dm_motor_get_feedback(MotorFeedback* feedback) {
     if(feedback == NULL) {
         return MOTOR_STATUS_PARAM_INVALID;
     }
@@ -289,9 +289,10 @@ MotorStatus dm_motor_set_speed_rads(uint8_t id, float rads) {
     rpm_float = rads * (30.0f / PI);
 
     // 2. 四舍五入转为整数
-    if (rpm_float >= 0.0f) {
+    if(rpm_float >= 0.0f) {
         rpm_target = (int16_t)(rpm_float + 0.5f);
-    } else {
+    }
+    else {
         rpm_target = (int16_t)(rpm_float - 0.5f);
     }
 
@@ -316,9 +317,10 @@ MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
         return MOTOR_STATUS_PARAM_INVALID;
     }
 
-    if (rps >= 0.0f) {
+    if(rps >= 0.0f) {
         rpm_target = (int16_t)(rps * 60.0f + 0.5f);
-    } else {
+    }
+    else {
         rpm_target = (int16_t)(rps * 60.0f - 0.5f);
     }
 
