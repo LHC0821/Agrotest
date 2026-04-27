@@ -18,11 +18,11 @@
 #define MOTOR_FEEDBACK_CMD_ERROR 5U
 
 #define MOTOR_STATUS_TABLE \
-	SX(OK, 0) \
-	SX(ERROR, 1) \
-	SX(TIMEOUT, 2) \
-	SX(PARAM_INVALID, 3) \
-	SX(NO_DATA, 4)
+    SX(OK, 0) \
+    SX(ERROR, 1) \
+    SX(TIMEOUT, 2) \
+    SX(PARAM_INVALID, 3) \
+    SX(NO_DATA, 4)
 
 #define SX(name, value) MOTOR_STATUS_##name = value,
 typedef enum {
@@ -64,9 +64,14 @@ extern const struct MotorInterface {
     MotorStatus(*set_speed_rps)(uint8_t id, float rps);
     MotorStatus(*request_report)(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3);
     MotorStatus(*update)(MotorFeedback* feedback);
+    MotorStatus(*set_speed_rads)(uint8_t id, float rads);
     float(*get_pos)(uint8_t id);
     float(*get_spd)(uint8_t id);
     float(*get_tor)(uint8_t id);
+    // --- 新增弧度制接口 ---
+    float(*get_pos_rad)(uint8_t id);
+    float(*get_spd_rads)(uint8_t id);
+    // --------------------
     MotorStatus(*latest_report)(uint8_t id, MotorReport* report);
 } *motor_instance;
 #undef SX
@@ -86,11 +91,16 @@ MotorStatus dm_motor_set_id(uint8_t id);
 MotorStatus dm_motor_set_mode_raw(uint8_t mode);
 MotorStatus dm_motor_set_speed(uint8_t id, int16_t rpm);
 MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps);
+MotorStatus dm_motor_set_speed_rads(uint8_t id, float rads);
 MotorStatus dm_motor_request_report(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3);
 MotorStatus dm_motor_update(MotorFeedback* feedback);
 float dm_motor_get_pos(uint8_t id);
 float dm_motor_get_spd(uint8_t id);
 float dm_motor_get_tor(uint8_t id);
+// --- 新增函数声明 ---
+float dm_motor_get_pos_rad(uint8_t id);
+float dm_motor_get_spd_rads(uint8_t id);
+// ------------------
 MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report);
 
 #endif

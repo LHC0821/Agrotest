@@ -20,6 +20,8 @@
 #define MOTOR_PROTOCOL_SPEED_MAX 32767
 #define MOTOR_PROTOCOL_SPEED_MIN -32767
 
+#define PI 3.1415926535f
+
 #define MOTOR_REPORT_COUNT ((uint8_t)(MOTOR_ID_MAX - MOTOR_ID_MIN + 1U))
 
 #define SX(name, value) .name = MOTOR_STATUS_##name,
@@ -40,8 +42,10 @@ const struct MotorInterface dm_motor_instance = {
     .get_spd = dm_motor_get_spd,
     .get_tor = dm_motor_get_tor,
     .latest_report = dm_motor_latest_report,
-    .set_speed = dm_motor_set_speed,
-    .set_speed_rps = dm_motor_set_speed_rps
+    .set_speed_rps = dm_motor_set_speed_rps,
+    .set_speed_rads = dm_motor_set_speed_rads, // 新增弧度驱动接口
+    .get_pos_rad = dm_motor_get_pos_rad,
+    .get_spd_rads = dm_motor_get_spd_rads
 };
 #undef SX
 
@@ -193,7 +197,6 @@ MotorStatus dm_motor_update(MotorFeedback* feedback) {
 
     *feedback = g_motor_last_feedback;
 
-
     g_motor_has_new_feedback = 0U;
 
     return MOTOR_STATUS_OK;
@@ -209,6 +212,14 @@ float dm_motor_get_spd(uint8_t id) {
 
 float dm_motor_get_tor(uint8_t id) {
     return (float)g_motor_last_feedback.torque;
+}
+
+float dm_motor_get_pos_rad(uint8_t id) {
+    return g_motor_last_feedback.pos * (PI / 180.0f);
+}
+
+float dm_motor_get_spd_rads(uint8_t id) {
+    return g_motor_last_feedback.spd * (PI / 30.0f);
 }
 
 MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report) {
@@ -258,11 +269,44 @@ static int16_t motor_rpm_to_protocol_speed(int16_t rpm) {
 }
 
 /**
- * @brief 设置电机目标速度 (输入单位: RPS 转每秒)
+ * @brief 设置电机目标角速度 (输入单位: rad/s 弧度每秒)
  * @param id 电机ID (1-8)
- * @param rps 目标转速 (Revolutions Per Second)
+ * @param rads 目标角速度 (Radians Per Second)
  * @return MotorStatus 状态码
  */
+MotorStatus dm_motor_set_speed_rads(uint8_t id, float rads) {
+    float rpm_float;
+    int16_t rpm_target;
+    int16_t rpm_clamped;
+    int16_t speed_scaled;
+
+    if(!motor_id_is_valid(id)) {
+        return MOTOR_STATUS_PARAM_INVALID;
+    }
+
+    // 1. 单位转换: rad/s -> RPM 
+    // n = omega * 60 / (2 * PI) = omega * 30 / PI
+    rpm_float = rads * (30.0f / PI);
+
+    // 2. 四舍五入转为整数
+    if (rpm_float >= 0.0f) {
+        rpm_target = (int16_t)(rpm_float + 0.5f);
+    } else {
+        rpm_target = (int16_t)(rpm_float - 0.5f);
+    }
+
+    // 3. 限幅处理 (最大 MOTOR_RPM_MAX)
+    rpm_clamped = motor_clamp_rpm(rpm_target);
+
+    // 4. 协议缩放 (RPM * 100)
+    speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
+
+    // 5. 执行发送
+    motor_send_speed_scaled(id, speed_scaled);
+
+    return MOTOR_STATUS_OK;
+}
+
 MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
     int16_t rpm_target;
     int16_t rpm_clamped;
@@ -272,27 +316,16 @@ MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
         return MOTOR_STATUS_PARAM_INVALID;
     }
 
-    // 2. 单位转换: RPS -> RPM (1 rps = 60 rpm)
-    // 使用 +0.5f 实现浮点数转整数时的四舍五入，提高控制精度
     if (rps >= 0.0f) {
         rpm_target = (int16_t)(rps * 60.0f + 0.5f);
     } else {
         rpm_target = (int16_t)(rps * 60.0f - 0.5f);
     }
 
-    // 3. 限速处理 (复用私有函数，确保不超过 MOTOR_RPM_MAX)
     rpm_clamped = motor_clamp_rpm(rpm_target);
-
-    // 4. 协议缩放 (复用私有函数，执行 RPM * MOTOR_SPEED_SCALE 并限制在 +/-32767)
     speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
 
-    // 5. 执行发送 
-    if(id >= 1U && id <= 4U){
-        motor_send_speed_scaled(MOTOR_CMD_SPEED_1_TO_4, speed_scaled);
-    }
-    else if(id >= 5U && id <= 8U){
-        motor_send_speed_scaled(MOTOR_CMD_SPEED_5_TO_8, speed_scaled);
-    }
+    motor_send_speed_scaled(id, speed_scaled);
 
     return MOTOR_STATUS_OK;
 }
