@@ -1,6 +1,6 @@
 #include "can.h"
 
-
+static void(*can_rx_callback[2])(FDCAN_HandleTypeDef* hfdcan, uint32_t rx_fifox_its) = { NULL, NULL };
 
 FDCAN_TxHeaderTypeDef TxHeader =
 {
@@ -17,7 +17,7 @@ static can_rx_callback_t g_can_rx_callbacks[MAX_CAN_CALLBACKS];
 static uint8_t g_callback_count = 0;
 
 /**
- * @brief 注册 CAN 接收回调函数
+ * @brief 注册 CAN 接收回调函数 (所有 FDCAN 共用分发)
  */
 void can_rx_callback_register(can_rx_callback_t callback) {
     if (g_callback_count < MAX_CAN_CALLBACKS && callback != NULL) {
@@ -26,16 +26,14 @@ void can_rx_callback_register(can_rx_callback_t callback) {
 }
 
 /**
- * @brief 统一的 FDCAN 中断接收回调
+ * @brief 统一的分发逻辑 (内部函数)
  */
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
+static void can_dispatch_callbacks(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifoITs, uint32_t fifo) {
     FDCAN_RxHeaderTypeDef rx_header;
     uint8_t rx_data[8];
 
-    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U) return;
-
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) == HAL_OK) {
-        // 遍历所有注册过的驱动模块（如 Motor, Servo），将数据分发出去
+    // 获取消息
+    if (HAL_FDCAN_GetRxMessage(hfdcan, fifo, &rx_header, rx_data) == HAL_OK) {
         for (uint8_t i = 0; i < g_callback_count; i++) {
             if (g_can_rx_callbacks[i] != NULL) {
                 g_can_rx_callbacks[i](hfdcan, &rx_header, rx_data);
@@ -164,9 +162,11 @@ void can_filter_init(FDCAN_HandleTypeDef* fdcanHandle) {
         Error_Handler();
     }
 
-    if(HAL_FDCAN_ActivateNotification(fdcanHandle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_TX_FIFO_EMPTY, 0) != HAL_OK) {
+    // 核心修复：同时使能 FIFO0 和 FIFO1 的新消息通知
+    if(HAL_FDCAN_ActivateNotification(fdcanHandle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_RX_FIFO1_NEW_MESSAGE | FDCAN_IT_TX_FIFO_EMPTY, 0) != HAL_OK) {
         Error_Handler();
     }
+    
     HAL_FDCAN_ConfigTxDelayCompensation(fdcanHandle, fdcanHandle->Init.DataPrescaler * fdcanHandle->Init.DataTimeSeg1, 0);
     HAL_FDCAN_EnableTxDelayCompensation(fdcanHandle);
 
@@ -195,20 +195,21 @@ void can_filter_init(FDCAN_HandleTypeDef* fdcanHandle) {
 void can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t len) {
     // 每次发送时在栈上创建独立的 Header
     FDCAN_TxHeaderTypeDef tx_header;
-    
+
     tx_header.TxFrameType = FDCAN_DATA_FRAME;
     tx_header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
     tx_header.BitRateSwitch = FDCAN_BRS_OFF;
     tx_header.FDFormat = FDCAN_CLASSIC_CAN; // RS06 使用经典模式
     tx_header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
     tx_header.MessageMarker = 0;
-    
+
     tx_header.Identifier = id;
-    
+
     // 2. 严谨判断 ID 类型
     if(id > 0x7ff) {
         tx_header.IdType = FDCAN_EXTENDED_ID;
-    } else {
+    }
+    else {
         tx_header.IdType = FDCAN_STANDARD_ID;
     }
 
@@ -216,10 +217,36 @@ void can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t 
 
     // 3. 检查 FIFO 状态，防止由于发送过快导致的丢失
     uint32_t fill_level = HAL_FDCAN_GetTxFifoFreeLevel(hfdcanx);
-    if (fill_level > 0) {
-        if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcanx, &tx_header, data) != HAL_OK) {
+    if(fill_level > 0) {
+        if(HAL_FDCAN_AddMessageToTxFifoQ(hfdcanx, &tx_header, data) != HAL_OK) {
             // 发送失败处理，可以在此处断点调试
         }
     }
 }
 
+void register_can_rx_callback(FDCAN_HandleTypeDef* hfdcanx, void (*callback)(FDCAN_HandleTypeDef* hfdcan, uint32_t rx_fifox_its)) {
+    if(hfdcanx->Instance == FDCAN1) can_rx_callback[0] = callback;
+    else if(hfdcanx->Instance == FDCAN2) can_rx_callback[1] = callback;
+}
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
+    if(hfdcan == NULL) return;
+
+    if(hfdcan->Instance == FDCAN1 && can_rx_callback[0] != NULL) {
+        can_rx_callback[0](hfdcan, RxFifo0ITs);
+    }
+    else if(hfdcan->Instance == FDCAN2 && can_rx_callback[1] != NULL) {
+        can_rx_callback[1](hfdcan, RxFifo0ITs);
+    }
+}
+
+void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo1ITs) {
+    if(hfdcan == NULL) return;
+
+    if(hfdcan->Instance == FDCAN1 && can_rx_callback[0] != NULL) {
+        can_rx_callback[0](hfdcan, RxFifo1ITs);
+    }
+    else if(hfdcan->Instance == FDCAN2 && can_rx_callback[1] != NULL) {
+        can_rx_callback[1](hfdcan, RxFifo1ITs);
+    }
+}

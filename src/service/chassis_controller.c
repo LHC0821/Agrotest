@@ -120,8 +120,7 @@ ChassisControllerStatus agro_chassis_controller_update(void) {
     SteelWheelErrorCode error_code;
 
     for(uint8_t i = 0x01; i < 0x04; i++) {
-        // TODO: 从舵机获取当前的转向角度和轮速
-        // steer_wheel.state.cur_wheels[i].steer_angle = servo.get_pos(i);
+        steer_wheel.state.cur_wheels[i].steer_angle = servo.get_pos(i);
         steer_wheel.state.cur_wheels[i].wheel_omega = motor.get_spd(i);
 
         return chassis.INVALID_PARAM;

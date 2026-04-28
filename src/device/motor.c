@@ -446,6 +446,10 @@ static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t 
 //     FDCAN_RxHeaderTypeDef rx_header;
 //     uint8_t rx_data[8] = { 0 };
 //     uint16_t rx_len;
+// void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
+//     FDCAN_RxHeaderTypeDef rx_header;
+//     uint8_t rx_data[8] = { 0 };
+//     uint16_t rx_len;
 
     
 //     if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U) {
@@ -455,7 +459,13 @@ static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t 
 //     if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK) {
 //         return;
 //     }
+//     if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK) {
+//         return;
+//     }
 
+//     if(hfdcan == NULL || hfdcan->Instance != FDCAN1) {
+//         return;
+//     }
 //     if(hfdcan == NULL || hfdcan->Instance != FDCAN1) {
 //         return;
 //     }
@@ -463,7 +473,14 @@ static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t 
 //     if(!motor_id_is_valid(g_motor_last_query_id)) {
 //         return;
 //     }
+//     if(!motor_id_is_valid(g_motor_last_query_id)) {
+//         return;
+//     }
 
+//     rx_len = get_fdcan_data_size(rx_header.DataLength);
+//     if(rx_len < 6U) {
+//         return;
+//     }
 //     rx_len = get_fdcan_data_size(rx_header.DataLength);
 //     if(rx_len < 6U) {
 //         return;
