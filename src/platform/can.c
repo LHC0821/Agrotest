@@ -12,6 +12,37 @@ FDCAN_TxHeaderTypeDef TxHeader =
     .MessageMarker = 0,                         // 消息标记
 };
 
+#define MAX_CAN_CALLBACKS 10
+static can_rx_callback_t g_can_rx_callbacks[MAX_CAN_CALLBACKS];
+static uint8_t g_callback_count = 0;
+
+/**
+ * @brief 注册 CAN 接收回调函数
+ */
+void can_rx_callback_register(can_rx_callback_t callback) {
+    if (g_callback_count < MAX_CAN_CALLBACKS && callback != NULL) {
+        g_can_rx_callbacks[g_callback_count++] = callback;
+    }
+}
+
+/**
+ * @brief 统一的 FDCAN 中断接收回调
+ */
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
+    FDCAN_RxHeaderTypeDef rx_header;
+    uint8_t rx_data[8];
+
+    if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U) return;
+
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) == HAL_OK) {
+        // 遍历所有注册过的驱动模块（如 Motor, Servo），将数据分发出去
+        for (uint8_t i = 0; i < g_callback_count; i++) {
+            if (g_can_rx_callbacks[i] != NULL) {
+                g_can_rx_callbacks[i](hfdcan, &rx_header, rx_data);
+            }
+        }
+    }
+}
 
 uint32_t get_fdcan_dlc(uint16_t size) {
     uint32_t fdcan_dlc = 0;

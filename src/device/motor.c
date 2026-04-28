@@ -2,7 +2,6 @@
 #include "can.h"
 #include "fdcan.h"
 #include "main.h"
-#include "servo.h"
 
 #include <string.h>
 
@@ -86,11 +85,15 @@ const char* dm_motor_status_str(MotorStatus status) {
         default: return "UNKNOWN";
     }
 }
-#undef SX
+#undef SX、
+
+static void motor_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data);
 
 MotorStatus dm_motor_init(void) {
     HAL_GPIO_WritePin(CAN1_EN_GPIO_Port, CAN1_EN_Pin, GPIO_PIN_SET);
     HAL_GPIO_WritePin(CAN2_EN_GPIO_Port, CAN2_EN_Pin, GPIO_PIN_SET);
+
+    can_rx_callback_register(motor_can_rx_handler);
 
     if(motor_start_fdcan(&hfdcan1) != MOTOR_STATUS_OK) {
         return MOTOR_STATUS_ERROR;
@@ -109,6 +112,20 @@ MotorStatus dm_motor_init(void) {
     g_motor_last_query_id = MOTOR_ID_MIN;
 
     return MOTOR_STATUS_OK;
+}
+
+/**
+ * @brief 电机专用的 CAN 接收处理逻辑
+ */
+static void motor_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data) {
+    // 逻辑移植自原回调：仅处理 FDCAN1 且 ID 有效的情况
+    if (hfdcan->Instance != FDCAN1) return;
+    if (!motor_id_is_valid(g_motor_last_query_id)) return;
+
+    uint16_t rx_len = get_fdcan_data_size(header->DataLength);
+    if (rx_len < 6U) return;
+
+    motor_cache_feedback(g_motor_last_query_id, data, rx_len);
 }
 
 MotorStatus dm_motor_set_feedback(uint8_t feedback_cmd, uint8_t id) {
@@ -203,24 +220,34 @@ MotorStatus dm_motor_get_feedback(MotorFeedback* feedback) {
     return MOTOR_STATUS_OK;
 }
 
+// --- motor.c 接口函数修正 ---
+
 float dm_motor_get_pos(uint8_t id) {
-    return (float)g_motor_last_feedback.pos;
+    if(!motor_id_is_valid(id)) return 0.0f;
+    uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
+    // 从缓存数组中提取对应 ID 的位置信息，并进行协议缩放转换
+    return (float)g_motor_report_cache[index].position / 100.0f;
 }
 
 float dm_motor_get_spd(uint8_t id) {
-    return (float)g_motor_last_feedback.spd;
+    if(!motor_id_is_valid(id)) return 0.0f;
+    uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
+    return (float)g_motor_report_cache[index].fb_speed / 100.0f;
 }
 
 float dm_motor_get_tor(uint8_t id) {
-    return (float)g_motor_last_feedback.torque;
+    if(!motor_id_is_valid(id)) return 0.0f;
+    uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
+    return (float)g_motor_report_cache[index].e_curru / 100.0f;
 }
 
+// 弧度制接口同步修正，内部调用已修正的 ID 检索函数
 float dm_motor_get_pos_rad(uint8_t id) {
-    return g_motor_last_feedback.pos * (PI / 180.0f);
+    return dm_motor_get_pos(id) * (PI / 180.0f);
 }
 
 float dm_motor_get_spd_rads(uint8_t id) {
-    return g_motor_last_feedback.spd * (PI / 30.0f);
+    return dm_motor_get_spd(id) * (PI / 30.0f);
 }
 
 MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report) {
@@ -413,36 +440,36 @@ static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t 
 }
 
 
-ServoFeedback g_latest_servo_data;
+// ServoFeedback g_latest_servo_data;
 
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
-    FDCAN_RxHeaderTypeDef rx_header;
-    uint8_t rx_data[8] = { 0 };
-    uint16_t rx_len;
+// void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
+//     FDCAN_RxHeaderTypeDef rx_header;
+//     uint8_t rx_data[8] = { 0 };
+//     uint16_t rx_len;
 
-    /* --- 以下为您原有的代码，未做任何修改 --- */
-    if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U) {
-        return;
-    }
-
-    if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK) {
-        return;
-    }
-
-    if(hfdcan == NULL || hfdcan->Instance != FDCAN1) {
-        return;
-    }
-
-    if(!motor_id_is_valid(g_motor_last_query_id)) {
-        return;
-    }
-
-    rx_len = get_fdcan_data_size(rx_header.DataLength);
-    if(rx_len < 6U) {
-        return;
-    }
-
-    motor_cache_feedback(g_motor_last_query_id, rx_data, rx_len);
     
-    rs06_parse_feedback(rx_header.Identifier, rx_data, &g_latest_servo_data);
-}
+//     if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) == 0U) {
+//         return;
+//     }
+
+//     if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rx_header, rx_data) != HAL_OK) {
+//         return;
+//     }
+
+//     if(hfdcan == NULL || hfdcan->Instance != FDCAN1) {
+//         return;
+//     }
+
+//     if(!motor_id_is_valid(g_motor_last_query_id)) {
+//         return;
+//     }
+
+//     rx_len = get_fdcan_data_size(rx_header.DataLength);
+//     if(rx_len < 6U) {
+//         return;
+//     }
+
+//     motor_cache_feedback(g_motor_last_query_id, rx_data, rx_len);
+    
+//     rs06_parse_feedback(rx_header.Identifier, rx_data, &g_latest_servo_data);
+// }

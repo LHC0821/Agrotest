@@ -27,7 +27,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "entry.h"
+#include "../../src/app/entry.h"
 
 /* USER CODE END Includes */
 

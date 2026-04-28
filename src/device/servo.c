@@ -1,6 +1,5 @@
 #include "servo.h"
 #include "can.h"
-
 #include <string.h>
 
 // ! ========================= 变 量 声 明 ========================= ! //
@@ -52,11 +51,26 @@ void servo_set_instance(const struct ServoInterface* instance) {
     }
 }
 
+static void servo_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data);
+
 ServoStatus rs06_init(FDCAN_HandleTypeDef* hfdcan) {
     if(hfdcan == NULL) return servo.PARAM_INVALID;
 
+    can_rx_callback_register(servo_can_rx_handler);  //新增注册
+
     servo_can = hfdcan;
     return servo.OK;
+}
+
+/**
+ * @brief 舵机专用的 CAN 接收处理逻辑
+ */
+static void servo_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data) {
+    // 舵机通常通过 ID 的特定位（如 EXT ID 的反馈类型位）来解析
+    if(hfdcan->Instance == FDCAN2){
+            rs06_parse_feedback(header->Identifier, data, &g_latest_servo_data);
+    }
+
 }
 
 #define SX(name, value) case SERVO_STATUS_##name: return #name;
@@ -157,23 +171,22 @@ ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
 }
 
 /**
- * @brief 解析主动上报帧 (已针对协议修正)
- * 修改点：
- * 1. res->motor_id 的提取改为从 bits 8-15 提取（发送源 ID）。
- * 2. msg_type 的判断改为提取 bits 24-28（指令模式位）。
+ * @brief 解析主动上报帧 (已修复 8位与16位比较 Bug)
  */
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
     if (res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
 
-    // 修改部分 1：指令类型判断 (CMD位在 28-24 位）
+    // --- 核心修复点 ---
+    // 提取指令码（ID 的 24-28位），结果范围是 0x00~0x1F
     uint8_t cmd_type = (uint8_t)((id >> 24) & 0x1F); 
-    if (cmd_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
+    
+    // SERVO_TYPE_FEEDBACK 是 0x1800，右移 8 位得到 0x18
+    if (cmd_type != (uint8_t)(SERVO_TYPE_FEEDBACK >> 8)) return SERVO_STATUS_ERROR;
 
-    // 修改部分 2：电机 ID 提取
-    // 在电机主动回传时，电机 ID 位于 bits 8-15 (Source ID 区域)
+    // 提取电机 ID (bits 8-15)
     res->motor_id = (uint8_t)((id >> 8) & 0xFF);
 
-    // 以下保持您的原始数据解析逻辑不变
+    // 数据解析逻辑保持不变，确保物理量转换正确
     uint16_t p_raw = (uint16_t)((data[0] << 8) | data[1]);
     uint16_t v_raw = (uint16_t)((data[2] << 8) | data[3]);
     uint16_t t_raw = (uint16_t)((data[4] << 8) | data[5]);
