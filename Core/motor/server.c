@@ -145,7 +145,8 @@ uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
 
     // 第一步：批量初始化和使能
     for (int i = 0; i < motor_count; i++) {
-        RS06_Set_Mode(&hfdcan2, motor_ids[i], RS06_MODE_PP);
+        RS06_Set_Mode(&hfdcan2, motor_ids[i], RS06_MODE_PP);、
+        
         RS06_Enable(&hfdcan2, motor_ids[i]);
     }
 
