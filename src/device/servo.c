@@ -175,6 +175,7 @@ ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
 
 /**
  * @brief 解析主动上报帧 (已修复 8位与16位比较 Bug)
+ * 第二次提交版本
  */
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
     if(res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
