@@ -240,7 +240,7 @@ static void chassis_monitor_read(void) {
     }
 
     MotorFeedback fb;
-    if(motor.update(&fb) != motor.OK) {
+    if(motor.get_feedback(&fb) != motor.OK) {
         return;
     }
 

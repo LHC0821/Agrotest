@@ -106,6 +106,10 @@ extern const struct ServoInterface {
     // ! ========================= 新 增 接口 ========================= ! //
     ServoStatus(*config_reporting)(uint8_t motor_id, uint16_t interval_ms);
     ServoStatus(*parse_feedback)(uint32_t id, uint8_t data[8], ServoFeedback* res);
+
+    float(*get_pos)(uint8_t motor_id);
+    float(*get_spd)(uint8_t motor_id);
+    float(*get_tor)(uint8_t motor_id);
 }*servo_instance;
 #undef SX
 #undef MX
@@ -130,5 +134,10 @@ void rs06_reset(void);
 // ! ========================= 新 增 函 数 声 明 ========================= ! //
 ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms);
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res);
+ServoStatus rs06_get_feedback(ServoFeedback* out_data);
+
+float rs06_get_pos(uint8_t motor_id);
+float rs06_get_spd(uint8_t motor_id);
+float rs06_get_tor(uint8_t motor_id);
 
 #endif

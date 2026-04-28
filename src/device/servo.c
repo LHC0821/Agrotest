@@ -28,7 +28,10 @@ const struct ServoInterface rs06_servo_instance = {
     .set_mit = rs06_set_mit,
     .reset = rs06_reset,
     .config_reporting = rs06_config_reporting,
-    .parse_feedback = rs06_parse_feedback
+    .parse_feedback = rs06_parse_feedback,
+    .get_pos = rs06_get_pos,
+    .get_spd = rs06_get_spd,
+    .get_tor = rs06_get_tor,
 };
 #undef SX
 #undef MX
@@ -163,11 +166,11 @@ ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
  * 2. msg_type 的判断改为提取 bits 24-28（指令模式位）。
  */
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
-    if (res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
+    if(res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
 
     // 修改部分 1：指令类型判断 (CMD位在 28-24 位）
-    uint8_t cmd_type = (uint8_t)((id >> 24) & 0x1F); 
-    if (cmd_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
+    uint8_t cmd_type = (uint8_t)((id >> 24) & 0x1F);
+    if(cmd_type != SERVO_TYPE_FEEDBACK) return SERVO_STATUS_ERROR;
 
     // 修改部分 2：电机 ID 提取
     // 在电机主动回传时，电机 ID 位于 bits 8-15 (Source ID 区域)
@@ -182,22 +185,34 @@ ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res
     res->velocity = rs06_u16_to_float(v_raw, V_MIN, V_MAX, 16);
     res->torque = rs06_u16_to_float(t_raw, T_MIN, T_MAX, 16);
     res->temperature = data[6];
-    res->error_code  = data[7];
+    res->error_code = data[7];
 
     return SERVO_STATUS_OK;
 }
 
 extern ServoFeedback g_latest_servo_data;
 
-ServoStatus servo_get_feedback_data(ServoFeedback* out_data) {
-    if (out_data == NULL) return SERVO_STATUS_PARAM_INVALID;
-    
+ServoStatus rs06_get_feedback(ServoFeedback* out_data) {
+    if(out_data == NULL) return SERVO_STATUS_PARAM_INVALID;
+
     // 为了防止读取时被中断修改导致数据错位，可以使用简单的关中断保护
-    __disable_irq(); 
+    __disable_irq();
     *out_data = g_latest_servo_data;
     __enable_irq();
-    
+
     return SERVO_STATUS_OK;
+}
+
+float rs06_get_pos(uint8_t motor_id) {
+    return g_latest_servo_data.position;
+}
+
+float rs06_get_spd(uint8_t motor_id) {
+    return g_latest_servo_data.velocity;
+}
+
+float rs06_get_tor(uint8_t motor_id) {
+    return g_latest_servo_data.torque;
 }
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
