@@ -21,6 +21,8 @@ typedef struct {
 #define servo (*servo_instance)
 
 #define HOST_ID 0xFD
+#define SERVO_ID_MIN 1U
+#define SERVO_ID_MAX 8U
 #define EXT_ID(type, host, motor) (((uint32_t)(type) << 16) | ((uint32_t)(host) << 8) | ((uint32_t)(motor)))
 
 #define PARAM_RUN_MODE    0x7005

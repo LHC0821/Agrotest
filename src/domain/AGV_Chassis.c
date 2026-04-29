@@ -41,6 +41,7 @@ static float current_wheel_angles[CHASSIS_WHEEL_COUNT] = { 0, 0, 0, 0 };
 static ChassisMotorSmoothCtrl g_chassis_motor_states[CHASSIS_WHEEL_COUNT];
 static MotorReport g_chassis_report_cache[CHASSIS_WHEEL_COUNT];
 static uint8_t g_chassis_query_id = 1;
+static uint8_t g_chassis_started = 0U;
 
 static float normalize_angle(float angle);
 static float angle_difference(float target, float current);
@@ -110,6 +111,7 @@ void Chassis_Init(void) {
     }
 
     g_chassis_query_id = 1;
+    g_chassis_started = 1U;
 
     HAL_TIM_Base_Start_IT(&htim6);
     HAL_TIM_Base_Start_IT(&htim15);
@@ -253,6 +255,10 @@ static void chassis_monitor_read(void) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim) {
+    if(g_chassis_started == 0U) {
+        return;
+    }
+
     if(htim->Instance == TIM6) {
         chassis_tick_smooth_output();
         return;

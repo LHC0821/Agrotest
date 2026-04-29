@@ -36,7 +36,7 @@ extern const struct ChassisControllerInterface {
 }*chassis_controller_interface;
 #undef SX
 
-extern const struct ChassisControllerInterface agro_chassis_controller_interface;
+extern const struct ChassisControllerInterface agro_chassis_controller_instance;
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 

@@ -18,15 +18,12 @@
 // ! 基 础 设 施 层 ! //
 #include "delay.h"
 
-// ! 领 域 层 ! //
-#include "AGV_Chassis.h"
-
-
 // ! 设 备 层 ! //
 #include "motor.h"
 #include "servo.h"
 
 // ! 服 务 层 ! //
+#include "chassis_controller.h"
 
 
 // ! 应 用 层 ! //
@@ -38,12 +35,25 @@
 static uint8_t current = 0;
 static uint8_t last_key_state = 0; // 用于存储上一次按键状态，实现边沿检测
 
+#define ENTRY_WHEEL_BASE_LENGTH 0.4f
+#define ENTRY_WHEEL_BASE_WIDTH  0.4f
+#define ENTRY_WHEEL_RADIUS      0.05f
+#define ENTRY_MAX_WHEEL_SPEED   1.0f
+#define ENTRY_TEST_SPEED        0.2f
+#define ENTRY_SERVO_REPORT_MS   10U
+
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
 static inline void entry_init(void) {
     motor.init();
-    servo.init(&hfdcan1);
-    Chassis_Init();
+    servo.init(&hfdcan2);
+    chassis.init(ENTRY_WHEEL_BASE_LENGTH, ENTRY_WHEEL_BASE_WIDTH, ENTRY_WHEEL_RADIUS, ENTRY_MAX_WHEEL_SPEED);
+
+    for(uint8_t id = 1U; id <= 4U; id++) {
+        (void)servo.set_mode(id, servo.PP);
+        (void)servo.enable(id);
+        (void)servo.config_reporting(id, ENTRY_SERVO_REPORT_MS);
+    }
 
     delay_ms_init(HAL_GetTick);
 
@@ -58,11 +68,13 @@ static inline void entry_loop(void) {
     }
     last_key_state = key_now;
     if(current == 0) {
-        Chassis_Set_WheelSpeedSmooth(1, 0);
+        chassis.stop();
     }
     else {
-        Chassis_Set_WheelSpeedSmooth(1, 100);
+        chassis.set_chassis(ENTRY_TEST_SPEED, 0.0f, 0.0f);
     }
+
+    chassis.update();
 }
 
 #endif

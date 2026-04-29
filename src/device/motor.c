@@ -19,6 +19,7 @@
 #define MOTOR_SPEED_SCALE 100
 #define MOTOR_PROTOCOL_SPEED_MAX 32767
 #define MOTOR_PROTOCOL_SPEED_MIN -32767
+#define MOTOR_QUERY_TIMEOUT_MS 20U
 
 #define PI 3.1415926535f
 
@@ -60,6 +61,9 @@ static uint8_t g_motor_report_valid[MOTOR_REPORT_COUNT] = { 0 };
 static MotorFeedback g_motor_last_feedback;
 static uint8_t g_motor_has_new_feedback = 0U;
 static uint8_t g_motor_last_query_id = MOTOR_ID_MIN;
+static uint8_t g_motor_query_pending = 0U;
+static uint32_t g_motor_query_started_ms = 0U;
+static uint8_t g_motor_drop_next_feedback = 0U;
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
@@ -67,7 +71,7 @@ static uint8_t motor_id_is_valid(uint8_t id);
 static int16_t motor_clamp_rpm(int16_t rpm);
 static int16_t motor_rpm_to_protocol_speed(int16_t rpm);
 static MotorStatus motor_start_fdcan(FDCAN_HandleTypeDef* hfdcan);
-static void motor_send_speed_scaled(uint8_t id, int16_t speed_scaled);
+static MotorStatus motor_send_speed_scaled(uint8_t id, int16_t speed_scaled);
 static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t rx_len);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
@@ -85,20 +89,16 @@ const char* dm_motor_status_str(MotorStatus status) {
         default: return "UNKNOWN";
     }
 }
-#undef SX、
+#undef SX
 
 static void motor_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data);
 
 MotorStatus dm_motor_init(void) {
     HAL_GPIO_WritePin(CAN1_EN_GPIO_Port, CAN1_EN_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(CAN2_EN_GPIO_Port, CAN2_EN_Pin, GPIO_PIN_SET);
 
-    can_rx_callback_register(motor_can_rx_handler);
+    can_rx_callback_register(&hfdcan1, motor_can_rx_handler);
 
     if(motor_start_fdcan(&hfdcan1) != MOTOR_STATUS_OK) {
-        return MOTOR_STATUS_ERROR;
-    }
-    if(motor_start_fdcan(&hfdcan2) != MOTOR_STATUS_OK) {
         return MOTOR_STATUS_ERROR;
     }
 
@@ -110,6 +110,9 @@ MotorStatus dm_motor_init(void) {
 
     g_motor_has_new_feedback = 0U;
     g_motor_last_query_id = MOTOR_ID_MIN;
+    g_motor_query_pending = 0U;
+    g_motor_query_started_ms = 0U;
+    g_motor_drop_next_feedback = 0U;
 
     return MOTOR_STATUS_OK;
 }
@@ -118,12 +121,22 @@ MotorStatus dm_motor_init(void) {
  * @brief 电机专用的 CAN 接收处理逻辑
  */
 static void motor_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data) {
-    // 逻辑移植自原回调：仅处理 FDCAN1 且 ID 有效的情况
-    if (hfdcan->Instance != FDCAN1) return;
-    if (!motor_id_is_valid(g_motor_last_query_id)) return;
+    if(hfdcan == NULL || header == NULL || data == NULL) return;
+    if(hfdcan->Instance != FDCAN1) return;
+    if(g_motor_query_pending == 0U || !motor_id_is_valid(g_motor_last_query_id)) return;
+
+    if((HAL_GetTick() - g_motor_query_started_ms) >= MOTOR_QUERY_TIMEOUT_MS) {
+        g_motor_query_pending = 0U;
+        return;
+    }
+
+    if(g_motor_drop_next_feedback != 0U) {
+        g_motor_drop_next_feedback = 0U;
+        return;
+    }
 
     uint16_t rx_len = get_fdcan_data_size(header->DataLength);
-    if (rx_len < 6U) return;
+    if(rx_len < 6U) return;
 
     motor_cache_feedback(g_motor_last_query_id, data, rx_len);
 }
@@ -136,15 +149,12 @@ MotorStatus dm_motor_set_feedback(uint8_t feedback_cmd, uint8_t id) {
     }
 
     tx_data[id - 1U] = feedback_cmd;
-    can_send(&hfdcan1, MOTOR_CMD_SET_FEEDBACK, tx_data, 8);
-
-    return MOTOR_STATUS_OK;
+    return (can_send(&hfdcan1, MOTOR_CMD_SET_FEEDBACK, tx_data, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
 }
 
 MotorStatus dm_motor_calibration(void) {
     uint8_t tx_data[8] = { 0 };
-    can_send(&hfdcan1, MOTOR_CMD_CALIBRATION, tx_data, 8);
-    return MOTOR_STATUS_OK;
+    return (can_send(&hfdcan1, MOTOR_CMD_CALIBRATION, tx_data, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
 }
 
 MotorStatus dm_motor_set_id(uint8_t id) {
@@ -155,18 +165,14 @@ MotorStatus dm_motor_set_id(uint8_t id) {
     }
 
     tx_data[0] = id;
-    can_send(&hfdcan1, MOTOR_CMD_SET_ID, tx_data, 8);
-
-    return MOTOR_STATUS_OK;
+    return (can_send(&hfdcan1, MOTOR_CMD_SET_ID, tx_data, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
 }
 
 MotorStatus dm_motor_set_mode_raw(uint8_t mode) {
     uint8_t tx_data[8] = { 0 };
     tx_data[0] = mode;
 
-    can_send(&hfdcan1, MOTOR_CMD_SET_MODE, tx_data, 8);
-
-    return MOTOR_STATUS_OK;
+    return (can_send(&hfdcan1, MOTOR_CMD_SET_MODE, tx_data, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
 }
 
 MotorStatus dm_motor_set_speed(uint8_t id, int16_t rpm) {
@@ -180,13 +186,12 @@ MotorStatus dm_motor_set_speed(uint8_t id, int16_t rpm) {
     rpm_clamped = motor_clamp_rpm(rpm);
     speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
 
-    motor_send_speed_scaled(id, speed_scaled);
-
-    return MOTOR_STATUS_OK;
+    return motor_send_speed_scaled(id, speed_scaled);
 }
 
 MotorStatus dm_motor_request_report(uint8_t id, uint8_t check1, uint8_t check2, uint8_t check3) {
     uint8_t tx_data[8] = { 0 };
+    uint32_t now;
 
     if(!motor_id_is_valid(id)) {
         return MOTOR_STATUS_PARAM_INVALID;
@@ -198,8 +203,30 @@ MotorStatus dm_motor_request_report(uint8_t id, uint8_t check1, uint8_t check2, 
     tx_data[3] = check3;
     tx_data[4] = 0xAA;
 
+    now = HAL_GetTick();
+
+    __disable_irq();
+    if(g_motor_query_pending != 0U && (now - g_motor_query_started_ms) < MOTOR_QUERY_TIMEOUT_MS) {
+        __enable_irq();
+        return MOTOR_STATUS_ERROR;
+    }
+
+    if(g_motor_query_pending != 0U) {
+        g_motor_drop_next_feedback = 1U;
+    }
+
     g_motor_last_query_id = id;
-    can_send(&hfdcan1, MOTOR_CMD_REQUEST_REPORT, tx_data, 8);
+    g_motor_query_pending = 1U;
+    g_motor_query_started_ms = now;
+    __enable_irq();
+
+    if(can_send(&hfdcan1, MOTOR_CMD_REQUEST_REPORT, tx_data, 8) != HAL_OK) {
+        __disable_irq();
+        g_motor_query_pending = 0U;
+        g_motor_drop_next_feedback = 0U;
+        __enable_irq();
+        return MOTOR_STATUS_ERROR;
+    }
 
     return MOTOR_STATUS_OK;
 }
@@ -209,13 +236,15 @@ MotorStatus dm_motor_get_feedback(MotorFeedback* feedback) {
         return MOTOR_STATUS_PARAM_INVALID;
     }
 
+    __disable_irq();
     if(g_motor_has_new_feedback == 0U) {
+        __enable_irq();
         return MOTOR_STATUS_NO_DATA;
     }
 
     *feedback = g_motor_last_feedback;
-
     g_motor_has_new_feedback = 0U;
+    __enable_irq();
 
     return MOTOR_STATUS_OK;
 }
@@ -223,22 +252,42 @@ MotorStatus dm_motor_get_feedback(MotorFeedback* feedback) {
 // --- motor.c 接口函数修正 ---
 
 float dm_motor_get_pos(uint8_t id) {
+    float position;
+
     if(!motor_id_is_valid(id)) return 0.0f;
     uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
-    // 从缓存数组中提取对应 ID 的位置信息，并进行协议缩放转换
-    return (float)g_motor_report_cache[index].position / 100.0f;
+
+    __disable_irq();
+    position = (float)g_motor_report_cache[index].position / 100.0f;
+    __enable_irq();
+
+    return position;
 }
 
 float dm_motor_get_spd(uint8_t id) {
+    float speed;
+
     if(!motor_id_is_valid(id)) return 0.0f;
     uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
-    return (float)g_motor_report_cache[index].fb_speed / 100.0f;
+
+    __disable_irq();
+    speed = (float)g_motor_report_cache[index].fb_speed / 100.0f;
+    __enable_irq();
+
+    return speed;
 }
 
 float dm_motor_get_tor(uint8_t id) {
+    float torque;
+
     if(!motor_id_is_valid(id)) return 0.0f;
     uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
-    return (float)g_motor_report_cache[index].e_curru / 100.0f;
+
+    __disable_irq();
+    torque = (float)g_motor_report_cache[index].e_curru / 100.0f;
+    __enable_irq();
+
+    return torque;
 }
 
 // 弧度制接口同步修正，内部调用已修正的 ID 检索函数
@@ -258,11 +307,14 @@ MotorStatus dm_motor_latest_report(uint8_t id, MotorReport* report) {
     }
 
     index = (uint8_t)(id - MOTOR_ID_MIN);
+    __disable_irq();
     if(g_motor_report_valid[index] == 0U) {
+        __enable_irq();
         return MOTOR_STATUS_NO_DATA;
     }
 
     *report = g_motor_report_cache[index];
+    __enable_irq();
 
     return MOTOR_STATUS_OK;
 }
@@ -331,9 +383,7 @@ MotorStatus dm_motor_set_speed_rads(uint8_t id, float rads) {
     speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
 
     // 5. 执行发送
-    motor_send_speed_scaled(id, speed_scaled);
-
-    return MOTOR_STATUS_OK;
+    return motor_send_speed_scaled(id, speed_scaled);
 }
 
 MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
@@ -355,9 +405,7 @@ MotorStatus dm_motor_set_speed_rps(uint8_t id, float rps) {
     rpm_clamped = motor_clamp_rpm(rpm_target);
     speed_scaled = motor_rpm_to_protocol_speed(rpm_clamped);
 
-    motor_send_speed_scaled(id, speed_scaled);
-
-    return MOTOR_STATUS_OK;
+    return motor_send_speed_scaled(id, speed_scaled);
 }
 
 static MotorStatus motor_start_fdcan(FDCAN_HandleTypeDef* hfdcan) {
@@ -384,7 +432,7 @@ static MotorStatus motor_start_fdcan(FDCAN_HandleTypeDef* hfdcan) {
     return MOTOR_STATUS_OK;
 }
 
-static void motor_send_speed_scaled(uint8_t id, int16_t speed_scaled) {
+static MotorStatus motor_send_speed_scaled(uint8_t id, int16_t speed_scaled) {
     uint8_t idx_high;
     uint8_t idx_low;
 
@@ -395,8 +443,7 @@ static void motor_send_speed_scaled(uint8_t id, int16_t speed_scaled) {
         g_motor_tx_0x32[idx_high] = (uint8_t)((uint16_t)speed_scaled >> 8);
         g_motor_tx_0x32[idx_low] = (uint8_t)((uint16_t)speed_scaled & 0x00FFU);
 
-        can_send(&hfdcan1, MOTOR_CMD_SPEED_1_TO_4, g_motor_tx_0x32, 8);
-        return;
+        return (can_send(&hfdcan1, MOTOR_CMD_SPEED_1_TO_4, g_motor_tx_0x32, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
     }
 
     idx_high = (uint8_t)((id - 5U) * 2U);
@@ -405,13 +452,14 @@ static void motor_send_speed_scaled(uint8_t id, int16_t speed_scaled) {
     g_motor_tx_0x33[idx_high] = (uint8_t)((uint16_t)speed_scaled >> 8);
     g_motor_tx_0x33[idx_low] = (uint8_t)((uint16_t)speed_scaled & 0x00FFU);
 
-    can_send(&hfdcan1, MOTOR_CMD_SPEED_5_TO_8, g_motor_tx_0x33, 8);
+    return (can_send(&hfdcan1, MOTOR_CMD_SPEED_5_TO_8, g_motor_tx_0x33, 8) == HAL_OK) ? MOTOR_STATUS_OK : MOTOR_STATUS_ERROR;
 }
 
 static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t rx_len) {
     uint8_t index = (uint8_t)(id - MOTOR_ID_MIN);
     MotorReport* report = &g_motor_report_cache[index];
 
+    __disable_irq();
     report->id = id;
     report->fb_speed = (int16_t)(((uint16_t)rx_data[0] << 8) | rx_data[1]);
 
@@ -428,15 +476,16 @@ static void motor_cache_feedback(uint8_t id, const uint8_t rx_data[8], uint16_t 
         report->fb_mode = 0;
     }
 
-    g_motor_report_valid[index] = 1U;
-
     g_motor_last_feedback.id = id;
     g_motor_last_feedback.spd = (float)report->fb_speed / 100.0f;
     g_motor_last_feedback.torque = (float)report->e_curru / 100.0f;
     g_motor_last_feedback.pos = (float)report->position / 100.0f;
     g_motor_last_feedback.err_code = report->err_code;
 
+    g_motor_report_valid[index] = 1U;
     g_motor_has_new_feedback = 1U;
+    g_motor_query_pending = 0U;
+    __enable_irq();
 }
 
 

@@ -1,27 +1,33 @@
 #include "can.h"
 
-static void(*can_rx_callback[2])(FDCAN_HandleTypeDef* hfdcan, uint32_t rx_fifox_its) = { NULL, NULL };
-
-FDCAN_TxHeaderTypeDef TxHeader =
-{
-    .TxFrameType = FDCAN_DATA_FRAME,            // 数据帧
-    .ErrorStateIndicator = FDCAN_ESI_ACTIVE,    // 错误指示状态
-    .BitRateSwitch = FDCAN_BRS_OFF,             // 比特率切换关闭
-    .FDFormat = FDCAN_CLASSIC_CAN,              // 经典 CAN 格式
-    .TxEventFifoControl = FDCAN_NO_TX_EVENTS,   // 不使用发送事件 FIFO
-    .MessageMarker = 0,                         // 消息标记
-};
-
 #define MAX_CAN_CALLBACKS 10
-static can_rx_callback_t g_can_rx_callbacks[MAX_CAN_CALLBACKS];
+
+typedef struct {
+    FDCAN_GlobalTypeDef* instance;
+    can_rx_callback_t callback;
+} CanRxCallbackSlot;
+
+static CanRxCallbackSlot g_can_rx_callbacks[MAX_CAN_CALLBACKS];
 static uint8_t g_callback_count = 0;
 
 /**
  * @brief 注册 CAN 接收回调函数 (所有 FDCAN 共用分发)
  */
-void can_rx_callback_register(can_rx_callback_t callback) {
-    if (g_callback_count < MAX_CAN_CALLBACKS && callback != NULL) {
-        g_can_rx_callbacks[g_callback_count++] = callback;
+void can_rx_callback_register(FDCAN_HandleTypeDef* hfdcan, can_rx_callback_t callback) {
+    if(hfdcan == NULL || callback == NULL) {
+        return;
+    }
+
+    for(uint8_t i = 0U; i < g_callback_count; i++) {
+        if(g_can_rx_callbacks[i].instance == hfdcan->Instance && g_can_rx_callbacks[i].callback == callback) {
+            return;
+        }
+    }
+
+    if(g_callback_count < MAX_CAN_CALLBACKS) {
+        g_can_rx_callbacks[g_callback_count].instance = hfdcan->Instance;
+        g_can_rx_callbacks[g_callback_count].callback = callback;
+        g_callback_count++;
     }
 }
 
@@ -31,14 +37,25 @@ void can_rx_callback_register(can_rx_callback_t callback) {
 static void can_dispatch_callbacks(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifoITs, uint32_t fifo) {
     FDCAN_RxHeaderTypeDef rx_header;
     uint8_t rx_data[8];
+    uint32_t fill_level;
 
-    // 获取消息
-    if (HAL_FDCAN_GetRxMessage(hfdcan, fifo, &rx_header, rx_data) == HAL_OK) {
-        for (uint8_t i = 0; i < g_callback_count; i++) {
-            if (g_can_rx_callbacks[i] != NULL) {
-                g_can_rx_callbacks[i](hfdcan, &rx_header, rx_data);
+    if((RxFifoITs & (FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_RX_FIFO1_NEW_MESSAGE)) == 0U) {
+        return;
+    }
+
+    fill_level = HAL_FDCAN_GetRxFifoFillLevel(hfdcan, fifo);
+    while(fill_level > 0U) {
+        if(HAL_FDCAN_GetRxMessage(hfdcan, fifo, &rx_header, rx_data) != HAL_OK) {
+            break;
+        }
+
+        for(uint8_t i = 0; i < g_callback_count; i++) {
+            if(g_can_rx_callbacks[i].instance == hfdcan->Instance && g_can_rx_callbacks[i].callback != NULL) {
+                g_can_rx_callbacks[i].callback(hfdcan, &rx_header, rx_data);
             }
         }
+
+        fill_level = HAL_FDCAN_GetRxFifoFillLevel(hfdcan, fifo);
     }
 }
 
@@ -166,7 +183,7 @@ void can_filter_init(FDCAN_HandleTypeDef* fdcanHandle) {
     if(HAL_FDCAN_ActivateNotification(fdcanHandle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_RX_FIFO1_NEW_MESSAGE | FDCAN_IT_TX_FIFO_EMPTY, 0) != HAL_OK) {
         Error_Handler();
     }
-    
+
     HAL_FDCAN_ConfigTxDelayCompensation(fdcanHandle, fdcanHandle->Init.DataPrescaler * fdcanHandle->Init.DataTimeSeg1, 0);
     HAL_FDCAN_EnableTxDelayCompensation(fdcanHandle);
 
@@ -192,9 +209,13 @@ void can_filter_init(FDCAN_HandleTypeDef* fdcanHandle) {
 //     HAL_FDCAN_AddMessageToTxFifoQ(hfdcanx, &TxHeader, data);
 // }
 
-void can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t len) {
+HAL_StatusTypeDef can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t len) {
     // 每次发送时在栈上创建独立的 Header
     FDCAN_TxHeaderTypeDef tx_header;
+
+    if(hfdcanx == NULL || data == NULL || len > 64U) {
+        return HAL_ERROR;
+    }
 
     tx_header.TxFrameType = FDCAN_DATA_FRAME;
     tx_header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
@@ -217,36 +238,21 @@ void can_send(FDCAN_HandleTypeDef* hfdcanx, uint32_t id, uint8_t* data, uint8_t 
 
     // 3. 检查 FIFO 状态，防止由于发送过快导致的丢失
     uint32_t fill_level = HAL_FDCAN_GetTxFifoFreeLevel(hfdcanx);
-    if(fill_level > 0) {
-        if(HAL_FDCAN_AddMessageToTxFifoQ(hfdcanx, &tx_header, data) != HAL_OK) {
-            // 发送失败处理，可以在此处断点调试
-        }
+    if(fill_level == 0U) {
+        return HAL_BUSY;
     }
-}
 
-void register_can_rx_callback(FDCAN_HandleTypeDef* hfdcanx, void (*callback)(FDCAN_HandleTypeDef* hfdcan, uint32_t rx_fifox_its)) {
-    if(hfdcanx->Instance == FDCAN1) can_rx_callback[0] = callback;
-    else if(hfdcanx->Instance == FDCAN2) can_rx_callback[1] = callback;
+    return HAL_FDCAN_AddMessageToTxFifoQ(hfdcanx, &tx_header, data);
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs) {
     if(hfdcan == NULL) return;
 
-    if(hfdcan->Instance == FDCAN1 && can_rx_callback[0] != NULL) {
-        can_rx_callback[0](hfdcan, RxFifo0ITs);
-    }
-    else if(hfdcan->Instance == FDCAN2 && can_rx_callback[1] != NULL) {
-        can_rx_callback[1](hfdcan, RxFifo0ITs);
-    }
+    can_dispatch_callbacks(hfdcan, RxFifo0ITs, FDCAN_RX_FIFO0);
 }
 
 void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo1ITs) {
     if(hfdcan == NULL) return;
 
-    if(hfdcan->Instance == FDCAN1 && can_rx_callback[0] != NULL) {
-        can_rx_callback[0](hfdcan, RxFifo1ITs);
-    }
-    else if(hfdcan->Instance == FDCAN2 && can_rx_callback[1] != NULL) {
-        can_rx_callback[1](hfdcan, RxFifo1ITs);
-    }
+    can_dispatch_callbacks(hfdcan, RxFifo1ITs, FDCAN_RX_FIFO1);
 }

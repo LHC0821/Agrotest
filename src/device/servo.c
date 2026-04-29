@@ -4,6 +4,10 @@
 
 // ! ========================= 变 量 声 明 ========================= ! //
 
+static ServoFeedback g_latest_servo_data;
+static ServoFeedback g_servo_feedback_cache[SERVO_ID_MAX - SERVO_ID_MIN + 1U];
+static uint8_t g_servo_feedback_valid[SERVO_ID_MAX - SERVO_ID_MIN + 1U];
+
 #define SX(name, value) .name = SERVO_STATUS_##name,
 #define MX(name, value) .name = SERVO_MODE_##name,
 #define TX(name, value) .name = SERVO_TYPE_##name,
@@ -45,6 +49,8 @@ static FDCAN_HandleTypeDef* servo_can;
 static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits);
 static float rs06_u16_to_float(uint16_t val, float min, float max, uint8_t bits); // 新增：缺失函数的声明
 static ServoStatus rs06_send(uint32_t id, uint8_t data[8]);
+static ServoStatus rs06_start_fdcan(FDCAN_HandleTypeDef* hfdcan);
+static uint8_t rs06_motor_id_is_valid(uint8_t motor_id);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
@@ -59,9 +65,25 @@ static void servo_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderType
 ServoStatus rs06_init(FDCAN_HandleTypeDef* hfdcan) {
     if(hfdcan == NULL) return servo.PARAM_INVALID;
 
-    can_rx_callback_register(servo_can_rx_handler);  //新增注册
-
     servo_can = hfdcan;
+
+    if(servo_can->Instance == FDCAN1) {
+        HAL_GPIO_WritePin(CAN1_EN_GPIO_Port, CAN1_EN_Pin, GPIO_PIN_SET);
+    }
+    else if(servo_can->Instance == FDCAN2) {
+        HAL_GPIO_WritePin(CAN2_EN_GPIO_Port, CAN2_EN_Pin, GPIO_PIN_SET);
+    }
+
+    memset(&g_latest_servo_data, 0, sizeof(g_latest_servo_data));
+    memset(g_servo_feedback_cache, 0, sizeof(g_servo_feedback_cache));
+    memset(g_servo_feedback_valid, 0, sizeof(g_servo_feedback_valid));
+
+    can_rx_callback_register(servo_can, servo_can_rx_handler);
+
+    if(rs06_start_fdcan(servo_can) != SERVO_STATUS_OK) {
+        return SERVO_STATUS_ERROR;
+    }
+
     return servo.OK;
 }
 
@@ -69,11 +91,29 @@ ServoStatus rs06_init(FDCAN_HandleTypeDef* hfdcan) {
  * @brief 舵机专用的 CAN 接收处理逻辑
  */
 static void servo_can_rx_handler(FDCAN_HandleTypeDef* hfdcan, FDCAN_RxHeaderTypeDef* header, uint8_t* data) {
-    // 舵机通常通过 ID 的特定位（如 EXT ID 的反馈类型位）来解析
-    if(hfdcan->Instance == FDCAN2){
-            rs06_parse_feedback(header->Identifier, data, &g_latest_servo_data);
+    ServoFeedback feedback;
+
+    if(hfdcan == NULL || header == NULL || data == NULL || servo_can == NULL) {
+        return;
     }
 
+    if(hfdcan->Instance != servo_can->Instance) {
+        return;
+    }
+
+    if(rs06_parse_feedback(header->Identifier, data, &feedback) != SERVO_STATUS_OK) {
+        return;
+    }
+
+    if(!rs06_motor_id_is_valid(feedback.motor_id)) {
+        return;
+    }
+
+    __disable_irq();
+    g_latest_servo_data = feedback;
+    g_servo_feedback_cache[feedback.motor_id - SERVO_ID_MIN] = feedback;
+    g_servo_feedback_valid[feedback.motor_id - SERVO_ID_MIN] = 1U;
+    __enable_irq();
 }
 
 #define SX(name, value) case SERVO_STATUS_##name: return #name;
@@ -175,14 +215,13 @@ ServoStatus rs06_config_reporting(uint8_t motor_id, uint16_t interval_ms) {
 
 /**
  * @brief 解析主动上报帧 (已修复 8位与16位比较 Bug)
- * 第二次提交版本
  */
 ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res) {
     if(res == NULL || data == NULL) return SERVO_STATUS_PARAM_INVALID;
 
     // 修改部分 1：指令类型判断 (CMD位在 28-24 位）
     uint8_t cmd_type = (uint8_t)((id >> 24) & 0x1F);
-    if (cmd_type != (uint8_t)(SERVO_TYPE_FEEDBACK >> 8)) return SERVO_STATUS_ERROR;
+    if(cmd_type != (uint8_t)(SERVO_TYPE_FEEDBACK >> 8)) return SERVO_STATUS_ERROR;
 
     // 提取电机 ID (bits 8-15)
     res->motor_id = (uint8_t)((id >> 8) & 0xFF);
@@ -201,8 +240,6 @@ ServoStatus rs06_parse_feedback(uint32_t id, uint8_t data[8], ServoFeedback* res
     return SERVO_STATUS_OK;
 }
 
-extern ServoFeedback g_latest_servo_data;
-
 ServoStatus rs06_get_feedback(ServoFeedback* out_data) {
     if(out_data == NULL) return SERVO_STATUS_PARAM_INVALID;
 
@@ -215,15 +252,45 @@ ServoStatus rs06_get_feedback(ServoFeedback* out_data) {
 }
 
 float rs06_get_pos(uint8_t motor_id) {
-    return g_latest_servo_data.position;
+    float position = 0.0f;
+
+    if(!rs06_motor_id_is_valid(motor_id)) return 0.0f;
+
+    __disable_irq();
+    if(g_servo_feedback_valid[motor_id - SERVO_ID_MIN] != 0U) {
+        position = g_servo_feedback_cache[motor_id - SERVO_ID_MIN].position;
+    }
+    __enable_irq();
+
+    return position;
 }
 
 float rs06_get_spd(uint8_t motor_id) {
-    return g_latest_servo_data.velocity;
+    float velocity = 0.0f;
+
+    if(!rs06_motor_id_is_valid(motor_id)) return 0.0f;
+
+    __disable_irq();
+    if(g_servo_feedback_valid[motor_id - SERVO_ID_MIN] != 0U) {
+        velocity = g_servo_feedback_cache[motor_id - SERVO_ID_MIN].velocity;
+    }
+    __enable_irq();
+
+    return velocity;
 }
 
 float rs06_get_tor(uint8_t motor_id) {
-    return g_latest_servo_data.torque;
+    float torque = 0.0f;
+
+    if(!rs06_motor_id_is_valid(motor_id)) return 0.0f;
+
+    __disable_irq();
+    if(g_servo_feedback_valid[motor_id - SERVO_ID_MIN] != 0U) {
+        torque = g_servo_feedback_cache[motor_id - SERVO_ID_MIN].torque;
+    }
+    __enable_irq();
+
+    return torque;
 }
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
@@ -247,13 +314,43 @@ static uint16_t rs06_float_to_u16(float val, float min, float max, uint8_t bits)
     return (uint16_t)(normalized * (float)max_bits_val);
 }
 
+static uint8_t rs06_motor_id_is_valid(uint8_t motor_id) {
+    return (uint8_t)((motor_id >= SERVO_ID_MIN) && (motor_id <= SERVO_ID_MAX));
+}
+
+static ServoStatus rs06_start_fdcan(FDCAN_HandleTypeDef* hfdcan) {
+    if(hfdcan == NULL) {
+        return SERVO_STATUS_PARAM_INVALID;
+    }
+
+    if(HAL_FDCAN_ConfigGlobalFilter(hfdcan,
+        FDCAN_ACCEPT_IN_RX_FIFO0,
+        FDCAN_ACCEPT_IN_RX_FIFO0,
+        FDCAN_REJECT_REMOTE,
+        FDCAN_REJECT_REMOTE) != HAL_OK) {
+        return SERVO_STATUS_ERROR;
+    }
+
+    if(HAL_FDCAN_Start(hfdcan) != HAL_OK) {
+        return SERVO_STATUS_ERROR;
+    }
+
+    if(HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+        return SERVO_STATUS_ERROR;
+    }
+
+    return SERVO_STATUS_OK;
+}
+
 static ServoStatus rs06_send(uint32_t id, uint8_t data[8]) {
     if(data == NULL) {
         return SERVO_STATUS_PARAM_INVALID;
     }
+    if(servo_can == NULL) {
+        return SERVO_STATUS_ERROR;
+    }
 
-    can_send(servo_can, id, data, 8);
-    return SERVO_STATUS_OK;
+    return (can_send(servo_can, id, data, 8) == HAL_OK) ? SERVO_STATUS_OK : SERVO_STATUS_ERROR;
 }
 
 
@@ -271,3 +368,4 @@ static float rs06_u16_to_float(uint16_t val, float min, float max, uint8_t bits)
 
     return min + (normalized * span);
 }
+

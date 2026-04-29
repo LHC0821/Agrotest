@@ -6,6 +6,7 @@ packDir: null
 srcDirs:
   - Core
   - Drivers
+  - src
 virtualFolder:
   name: <virtual_root>
   files: []
@@ -28,6 +29,12 @@ targets:
         - Drivers/STM32H7xx_HAL_Driver/Inc/Legacy
         - Drivers/CMSIS/Device/ST/STM32H7xx/Include
         - Drivers/CMSIS/Include
+        - src/app
+        - src/device
+        - src/domain
+        - src/infra
+        - src/platform
+        - src/service
       libList: []
     excludeList: []
     settings: {}
