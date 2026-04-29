@@ -132,7 +132,7 @@ ChassisControllerStatus agro_chassis_controller_get_model(float* length, float* 
 
     return chassis.OK;
 }
-
+#include <stdio.h>
 ChassisControllerStatus agro_chassis_controller_update(void) {
     SteelWheelErrorCode error_code;
     bool should_send_wheels;
@@ -153,14 +153,23 @@ ChassisControllerStatus agro_chassis_controller_update(void) {
         if(error_code != STEER_WHEEL_OK) return convert_steer_wheel_error(error_code);
     }
 
+    // TODO: servo 角度归一化
     should_send_wheels = is_wheels_changed(&steer_wheel, &last_steer_wheel);
     if(should_send_wheels) {
-        for(uint8_t i = 0U; i < 4U; i++) {
-            uint8_t id = (uint8_t)(i + 1U);
+        for(uint8_t i = 5U; i <= 8U; i++) {
+            uint8_t id = i;
             servo.set_position(id, steer_wheel.control.wheels[i].steer_angle);
+        }
+        for(uint8_t i = 1U; i < 5U; i++) {
+            uint8_t id = (uint8_t)(i + 1U);
             motor.set_speed_rads(id, steer_wheel.control.wheels[i].wheel_omega);
         }
     }
+    printf("Servo: %d, %d, %d, %d | Motor: %d, %d, %d, %d\r\n",
+        (int)(steer_wheel.control.wheels[0].steer_angle * 1000), (int)(steer_wheel.control.wheels[1].steer_angle * 1000),
+        (int)(steer_wheel.control.wheels[2].steer_angle * 1000), (int)(steer_wheel.control.wheels[3].steer_angle * 1000),
+        (int)(steer_wheel.control.wheels[0].wheel_omega * 1000), (int)(steer_wheel.control.wheels[1].wheel_omega * 1000),
+        (int)(steer_wheel.control.wheels[2].wheel_omega * 1000), (int)(steer_wheel.control.wheels[3].wheel_omega * 1000));
 
     last_steer_wheel = steer_wheel;
 

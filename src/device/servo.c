@@ -23,6 +23,7 @@ const struct ServoInterface rs06_servo_instance = {
     },
     .status_str = rs06_status_str,
     .mode_str = rs06_mode_str,
+    .init = rs06_init,
     .enable = rs06_enable,
     .stop = rs06_stop,
     .change_id = rs06_change_id,
@@ -196,8 +197,53 @@ ServoStatus rs06_set_mit(uint8_t motor_id, float angle_rad, float speed_rad_s, f
     return rs06_send(id, data);
 }
 
-void rs06_reset(void) {
-    // 回归零位
+/**
+ * @brief 复位舵机到初始位置
+ * @return 操作状态
+ */
+ServoStatus rs06_reset(void) {
+    if(servo_can == NULL) {
+        return SERVO_STATUS_ERROR;
+    }
+
+    const uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
+    // const float targets[] = {-0.30f, 0.80f, -2.20f, 0.80f};
+    const float targets[] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const uint8_t motor_count = (uint8_t)(sizeof(motor_ids) / sizeof(motor_ids[0]));
+    ServoStatus status = SERVO_STATUS_OK;
+
+    /* 第一步：批量设置位置模式并使能 */
+    for(uint8_t i = 0; i < motor_count; ++i) {
+        status = rs06_set_mode(motor_ids[i], SERVO_MODE_PP);
+        if(status != SERVO_STATUS_OK) {
+            return status;
+        }
+        status = rs06_enable(motor_ids[i]);
+        if(status != SERVO_STATUS_OK) {
+            return status;
+        }
+    }
+
+    /* 第二步：批量发送位置指令 */
+    for(uint8_t i = 0; i < motor_count; ++i) {
+        status = rs06_set_position(motor_ids[i], targets[i]);
+        if(status != SERVO_STATUS_OK) {
+            return status;
+        }
+    }
+
+    /* 第三步：等待电机运动完成 */
+    HAL_Delay(1000);
+
+    /* 第四步：批量停止 */
+    // for(uint8_t i = 0; i < motor_count; ++i) {
+    //     status = rs06_stop(motor_ids[i]);
+    //     if(status != SERVO_STATUS_OK) {
+    //         return status;
+    //     }
+    // }
+
+    return SERVO_STATUS_OK;
 }
 
 /**

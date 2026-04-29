@@ -76,32 +76,192 @@ typedef struct {
     Matrix name; \
     matrix_identity(&name, size, name##_data)
 
+/**
+ * @brief 创建一个矩阵
+ * @param m 指向 Matrix 结构的指针
+ * @param row 矩阵的行数
+ * @param col 矩阵的列数
+ * @param data 矩阵数据缓冲区指针 (按行优先存储)
+ * @return 操作状态
+ */
 MatrixErrorCode matrix(Matrix* const m, unsigned int row, unsigned int col, float* data);
+/**
+ * @brief 创建一个单位矩阵
+ * @param m 指向 Matrix 结构的指针
+ * @param size 矩阵的行列数 (必须为方阵)
+ * @param data 矩阵数据缓冲区指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_identity(Matrix* const m, unsigned int size, float* data);
+/**
+ * @brief 获取矩阵中指定位置的元素
+ * @param m 指向源矩阵的指针
+ * @param r 行索引 (0-based)
+ * @param c 列索引 (0-based)
+ * @param value 指向存储元素值的变量指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_get(const Matrix* const m, unsigned int r, unsigned int c, float* value);
+/**
+ * @brief 设置矩阵中指定位置的元素
+ * @param m 指向目标矩阵的指针
+ * @param r 行索引 (0-based)
+ * @param c 列索引 (0-based)
+ * @param value 要设置的元素值
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_set(Matrix* const m, unsigned int r, unsigned int c, float value);
+/**
+ * @brief 复制矩阵
+ * @param m 指向源矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_copy(const Matrix* const m, Matrix* const out);
 
+/**
+ * @brief 矩阵加法 (A + B)
+ * @param A 指向第一个矩阵的指针
+ * @param B 指向第二个矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_add(const Matrix* const A, const Matrix* const B, Matrix* const out);
+/**
+ * @brief 矩阵减法 (A - B)
+ * @param A 指向第一个矩阵的指针
+ * @param B 指向第二个矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_sub(const Matrix* const A, const Matrix* const B, Matrix* const out);
+/**
+ * @brief 矩阵标量乘法 (m * scalar)
+ * @param m 指向矩阵的指针
+ * @param scalar 标量值
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_scalar_mul(const Matrix* const m, float scalar, Matrix* const out);
+/**
+ * @brief 矩阵乘法 (A * B)
+ * @param A 指向第一个矩阵的指针
+ * @param B 指向第二个矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_mul(const Matrix* const A, const Matrix* const B, Matrix* const out);
+/**
+ * @brief 矩阵转置 (m^T)
+ * @param m 指向源矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_transpose(const Matrix* const m, Matrix* const out);
+/**
+ * @brief 将矩阵转换为上三角矩阵
+ * @param m 指向源矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_to_upper_triangular(const Matrix* const m, Matrix* const out);
+/**
+ * @brief 将矩阵转换为下三角矩阵
+ * @param m 指向源矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_to_lower_triangular(const Matrix* const m, Matrix* const out);
+/**
+ * @brief 计算矩阵行列式
+ * @param m 指向矩阵的指针
+ * @param out 指向存储行列式值的变量指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_determinant(const Matrix* const m, float* out);
+/**
+ * @brief 计算矩阵逆矩阵 (m^-1)
+ * @param m 指向源矩阵的指针
+ * @param out 指向输出矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_inverse(const Matrix* const m, Matrix* const out);
 
+/**
+ * @brief 规范化四元数 (单位四元数)
+ * @param quat 输入四元数数组 [w, x, y, z]
+ * @param out 输出四元数数组 (规范化后)
+ * @return 操作状态
+ */
 MatrixErrorCode quat_normalize(const float quat[4], float out[4]);
+/**
+ * @brief 将旋转矩阵转换为四元数
+ * @param R 指向旋转矩阵的指针
+ * @param quat 输出四元数数组 [w, x, y, z]
+ * @return 操作状态
+ */
 MatrixErrorCode matrix_to_quat(const Matrix* const R, float quat[4]);
+/**
+ * @brief 将四元数转换为旋转矩阵
+ * @param quat 输入四元数数组 [w, x, y, z]
+ * @param R 指向输出旋转矩阵的指针
+ * @return 操作状态
+ */
 MatrixErrorCode quat_to_matrix(const float quat[4], Matrix* const R);
 
+/**
+ * @brief 3D 向量加法 (a + b)
+ * @param a 指向第一个向量的指针
+ * @param b 指向第二个向量的指针
+ * @param out 指向输出向量的指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_add(const Vector3* const a, const Vector3* const b, Vector3* out);
+/**
+ * @brief 3D 向量减法 (a - b)
+ * @param a 指向第一个向量的指针
+ * @param b 指向第二个向量的指针
+ * @param out 指向输出向量的指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_sub(const Vector3* const a, const Vector3* const b, Vector3* out);
+/**
+ * @brief 3D 向量标量乘法 (v * scalar)
+ * @param v 指向向量的指针
+ * @param scalar 标量值
+ * @param out 指向输出向量的指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_scalar_mul(const Vector3* const v, float scalar, Vector3* out);
+/**
+ * @brief 计算 3D 向量的模长
+ * @param v 指向向量的指针
+ * @param out 指向存储模长的变量指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_norm(const Vector3* const v, float* out);
+/**
+ * @brief 规范化 3D 向量 (单位向量)
+ * @param v 指向源向量的指针
+ * @param out 指向输出向量的指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_normalize(const Vector3* const v, Vector3* out);
+/**
+ * @brief 计算两个 3D 向量的点积
+ * @param a 指向第一个向量的指针
+ * @param b 指向第二个向量的指针
+ * @param out 指向存储点积结果的变量指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_dot(const Vector3* const a, const Vector3* const b, float* out);
+/**
+ * @brief 计算两个 3D 向量的叉积 (外积)
+ * @param a 指向第一个向量的指针
+ * @param b 指向第二个向量的指针
+ * @param out 指向输出向量的指针
+ * @return 操作状态
+ */
 MatrixErrorCode vec3_cross(const Vector3* const a, const Vector3* const b, Vector3* out);
 
 #endif

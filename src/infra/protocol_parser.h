@@ -222,7 +222,26 @@ struct FrameParser {
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
+/**
+ * @brief 创建一个环形缓冲区
+ * @param self 指向 RingBuf 结构体的指针
+ * @param buf 指向外部数据缓冲区的指针
+ * @param capacity 缓冲区容量 (字节)
+ * @param overwrite 是否允许覆盖旧数据 (1: 允许; 0: 不允许)
+ * @return 操作状态
+ */
 RingBufErrorCode RingBufCreate(RingBuf* const self, uint8_t* const buf, const uint16_t capacity, const uint8_t overwrite);
+/**
+ * @brief 创建一个帧解析器
+ * @param self 指向 FrameParser 结构体的指针
+ * @param ring_buf 指向关联的 RingBuf 环形缓冲区的指针
+ * @param header 帧头数据 (字节数组)
+ * @param header_length 帧头长度 (字节)，最小为 2
+ * @param frame_buf 帧数据输出缓冲区指针
+ * @param frame_buf_capacity 帧数据缓冲区容量 (字节)
+ * @param crc_enabled 是否启用 CRC 校验 (true: 启用; false: 禁用)
+ * @return 操作状态
+ */
 FrameParserErrorCode FrameParserCreate(FrameParser* const self, RingBuf* const ring_buf, const uint8_t* const header, const uint8_t header_length, uint8_t* const frame_buf, const uint16_t frame_buf_capacity, const bool crc_enabled);
 
 #endif

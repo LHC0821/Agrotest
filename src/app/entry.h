@@ -9,7 +9,7 @@
 #include "usart.h"  // IWYU pragma: keep
 #include "gpio.h"   // IWYU pragma: keep
 
-// #include <stdio.h>
+#include <stdio.h>
 
 // ! 平 台 层 ! //
 #include "key.h"
@@ -42,6 +42,8 @@ static uint8_t last_key_state = 0; // 用于存储上一次按键状态，实现
 #define ENTRY_TEST_SPEED        0.2f
 #define ENTRY_SERVO_REPORT_MS   10U
 
+static ms_t chassis_update_task = 0;
+
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
 static inline void entry_init(void) {
@@ -49,7 +51,7 @@ static inline void entry_init(void) {
     servo.init(&hfdcan2);
     chassis.init(ENTRY_WHEEL_BASE_LENGTH, ENTRY_WHEEL_BASE_WIDTH, ENTRY_WHEEL_RADIUS, ENTRY_MAX_WHEEL_SPEED);
 
-    for(uint8_t id = 1U; id <= 4U; id++) {
+    for(uint8_t id = 5U; id <= 8U; id++) {
         (void)servo.set_mode(id, servo.PP);
         (void)servo.enable(id);
         (void)servo.config_reporting(id, ENTRY_SERVO_REPORT_MS);
@@ -57,24 +59,16 @@ static inline void entry_init(void) {
 
     delay_ms_init(HAL_GetTick);
 
-    // motor.set_mode_raw(0x01);
-    // delay_ms(1000);
+    // servo.reset();
+    delay_ms(1000);
+    printf("Initialization complete.\r\n");
 }
 
 static inline void entry_loop(void) {
-    uint8_t key_now = key_scan();
-    if(key_now == 1 && last_key_state == 0) {
-        current = !current;
+    if(delay_nb_ms(&chassis_update_task, 10)) { // 每100ms更新一次底盘
+        chassis.update();
+        chassis.set_chassis(0.0f, 0.0f, 0.0f);
     }
-    last_key_state = key_now;
-    if(current == 0) {
-        chassis.stop();
-    }
-    else {
-        chassis.set_chassis(ENTRY_TEST_SPEED, 0.0f, 0.0f);
-    }
-
-    chassis.update();
 }
 
 #endif

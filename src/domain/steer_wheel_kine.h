@@ -53,18 +53,60 @@ extern const struct SteerWheelInterface {
     struct {
         STEER_WHEEL_STATUS_TABLE
     };
+    /**
+     * @brief 初始化转向轮系统
+     * @param steer_wheel 指向 SteerWheel 结构的指针
+     * @param model 转向轮模型参数
+     * @return 初始化状态
+     */
     SteelWheelErrorCode(*init)(SteerWheel* steer_wheel, SteerWheelModel model);
+    /**
+     * @brief 正向运动学 (由轮速和转向角计算底盘速度)
+     * @param steer_wheel 指向 SteerWheel 结构的指针
+     * @return 计算状态
+     */
     SteelWheelErrorCode(*fk)(SteerWheel* steer_wheel);
+    /**
+     * @brief 逆向运动学 (由底盘速度计算轮速和转向角)
+     * @param steer_wheel 指向 SteerWheel 结构的指针
+     * @return 计算状态
+     */
     SteelWheelErrorCode(*ik)(SteerWheel* steer_wheel);
+    /**
+     * @brief 将错误码转换为字符串
+     * @param status 错误码值
+     * @return 错误信息字符串
+     */
     const char* (*error_code_to_str)(SteelWheelErrorCode status);
 } steer_wheel_interface;
 #undef X
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
 
+/**
+ * @brief 初始化转向轮系统
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @param model 转向轮模型参数
+ * @return 初始化状态
+ */
 SteelWheelErrorCode steer_wheel_init(SteerWheel* steer_wheel, SteerWheelModel model);
+/**
+ * @brief 正向运动学 (由轮速和转向角计算底盘速度)
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @return 计算状态
+ */
 SteelWheelErrorCode steer_wheel_fk(SteerWheel* steer_wheel);
+/**
+ * @brief 逆向运动学 (由底盘速度计算轮速和转向角)
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @return 计算状态
+ */
 SteelWheelErrorCode steer_wheel_ik(SteerWheel* steer_wheel);
+/**
+ * @brief 将错误码转换为字符串
+ * @param status 错误码值
+ * @return 错误信息字符串
+ */
 const char* steer_wheel_error_code_to_str(SteelWheelErrorCode status);
 
 #endif

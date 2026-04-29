@@ -26,13 +26,43 @@ const struct SteerWheelInterface steer_wheel_interface = {
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
+/**
+ * @brief 获取浮点数的绝对值
+ * @param x 输入值
+ * @return 绝对值
+ */
 static float sw_absf(float x);
+/**
+ * @brief 将角度规范化到 (-π, π] 范围
+ * @param angle 输入角度 (弧度)
+ * @return 规范化后的角度
+ */
 static float sw_wrap_pi(float angle);
+/**
+ * @brief 获取四个车轮在底盘坐标系中的位置坐标
+ * @param model 转向轮模型参数
+ * @param x 4 个车轮的 x 坐标数组 (输出)
+ * @param y 4 个车轮的 y 坐标数组 (输出)
+ * @return 无
+ */
 static void sw_get_wheel_pos(const SteerWheelModel* model, float x[4], float y[4]);
+/**
+ * @brief 优化轮模块控制 (处理轮向反转)
+ * @param target_angle 目标转向角指针 (输入/输出)
+ * @param target_speed 目标线速度指针 (输入/输出)
+ * @param current_angle 当前转向角
+ * @return 无
+ */
 static void sw_optimize_module(float* target_angle, float* target_speed, float current_angle);
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
+/**
+ * @brief 初始化转向轮系统
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @param model 转向轮模型参数 (长、宽、轮半径、最大轮速)
+ * @return 初始化状态
+ */
 SteelWheelErrorCode steer_wheel_init(SteerWheel* steer_wheel, SteerWheelModel model) {
     if(steer_wheel == NULL) return sw.INVALID_PARAM;
     if(model.length <= 0.0f || model.width <= 0.0f || model.wheel_radius <= 0.0f || model.max_wheel_linear_speed < 0.0f) return sw.INVALID_MODEL;
@@ -56,6 +86,12 @@ SteelWheelErrorCode steer_wheel_init(SteerWheel* steer_wheel, SteerWheelModel mo
     return sw.OK;
 }
 
+/**
+ * @brief 正向运动学计算 (由轮速和转向角计算底盘速度)
+ * @details 根据当前各轮的角速度和转向角，使用最小二乘法计算底盘在全局坐标系中的速度
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @return 计算状态
+ */
 SteelWheelErrorCode steer_wheel_fk(SteerWheel* steer_wheel) {
     if(steer_wheel == NULL) return sw.INVALID_PARAM;
     if(steer_wheel->model.length <= 0.0f || steer_wheel->model.width <= 0.0f || steer_wheel->model.wheel_radius <= 0.0f) return sw.INVALID_MODEL;
@@ -89,6 +125,12 @@ SteelWheelErrorCode steer_wheel_fk(SteerWheel* steer_wheel) {
     return sw.OK;
 }
 
+/**
+ * @brief 逆向运动学计算 (由底盘速度计算轮速和转向角)
+ * @details 根据期望的底盘速度和角速度，计算每个轮的目标角速度和转向角，并进行速度限制和轮向优化
+ * @param steer_wheel 指向 SteerWheel 结构的指针
+ * @return 计算状态
+ */
 SteelWheelErrorCode steer_wheel_ik(SteerWheel* steer_wheel) {
     if(steer_wheel == NULL) return sw.INVALID_PARAM;
     if(steer_wheel->model.length <= 0.0f || steer_wheel->model.width <= 0.0f || steer_wheel->model.wheel_radius <= 0.0f) return sw.INVALID_MODEL;
@@ -134,6 +176,11 @@ SteelWheelErrorCode steer_wheel_ik(SteerWheel* steer_wheel) {
 }
 
 #define X(name, str) case STEER_WHEEL_##name: return str;
+/**
+ * @brief 将错误码转换为字符串
+ * @param status 错误码值
+ * @return 错误信息字符串
+ */
 const char* steer_wheel_error_code_to_str(SteelWheelErrorCode status) {
     switch(status) {
         STEER_WHEEL_STATUS_TABLE
@@ -144,10 +191,20 @@ const char* steer_wheel_error_code_to_str(SteelWheelErrorCode status) {
 
 // ! ========================= 私 有 函 数 实 现 ========================= ! //
 
+/**
+ * @brief 获取浮点数的绝对值
+ * @param x 输入值
+ * @return 绝对值
+ */
 static float sw_absf(float x) {
     return (x >= 0.0f) ? x : -x;
 }
 
+/**
+ * @brief 将角度规范化到 (-π, π] 范围
+ * @param angle 输入角度 (弧度)
+ * @return 规范化后的角度
+ */
 static float sw_wrap_pi(float angle) {
     while(angle > SW_PI) {
         angle -= SW_2PI;
