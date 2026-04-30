@@ -21,6 +21,7 @@
 #define RS06_PARAM_RUN_MODE 0x7005    // 运行模式参数地址 
 #define RS06_PARAM_LOC_REF  0x7016    // 【重要修正】位置模式期望位置 (Float) 
 #define RS06_PARAM_LIMIT_SPD 0x7017   // 位置模式速度限制 (Float) 
+#define RS06_TYPE_SAVE      0x1600   // 通信类型 22: 电机数据保存帧
 
 /* 模式定义  */
 #define RS06_MODE_MIT         0   // 运控模式
@@ -34,9 +35,9 @@
 #define RS06_V_MIN         -50.0f  // 最小速度 (rad/s)
 #define RS06_V_MAX          50.0f  // 最大速度 (rad/s)
 #define RS06_KP_MIN         0.0f   // 最小 Kp
-#define RS06_KP_MAX         5000.0f// 最大 Kp (已修正) 
+#define RS06_KP_MAX         5000.0f// 最大 Kp 
 #define RS06_KD_MIN         0.0f   // 最小 Kd
-#define RS06_KD_MAX         100.0f // 最大 Kd (已修正) 
+#define RS06_KD_MAX         100.0f // 最大 Kd 
 
 /* ------------------ 模块化函数声明 ------------------ */
 void RS06_Enable(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
@@ -47,5 +48,8 @@ void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, flo
 void RS06_Set_Position(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s, float kp, float kd, float t_ff);
 // void RS06_Set_Position_Instruction10(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, float angle_rad, float speed_rad_s);
 void RS06_reset(void);
+void RS06_Set_Mechanical_Zero(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
+void RS06_Save_Config(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
+void RS06_Zeroing_And_Save_Process(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id);
 
 #endif /* __RS06_H__ */

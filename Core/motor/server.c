@@ -50,6 +50,52 @@ void RS06_Change_ID(FDCAN_HandleTypeDef* hfdcan, uint8_t old_id, uint8_t new_id)
     can_send(hfdcan, id, data, 8);
 }
 
+/**
+ * @brief  通信类型 6：设置电机机械零位[cite: 1]
+ * @param  motor_id: 目标电机 ID
+ * @note   该指令会将当前电机的机械位置强制清零。
+ */
+void RS06_Set_Mechanical_Zero(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+    uint32_t id = RS06_EXT_ID(RS06_TYPE_SET_ZERO, RS06_HOST_ID, motor_id);
+    
+    // 根据手册：Byte[0] = 1[cite: 1]
+    uint8_t data[8] = {1, 0, 0, 0, 0, 0, 0, 0}; 
+    
+    can_send(hfdcan, id, data, 8);
+}
+
+/**
+ * @brief  通信类型 22：电机数据保存帧[cite: 1]
+ * @param  motor_id: 目标电机 ID
+ * @note   必须发送此帧，设置的零位（MechOffset）才会掉电不丢失。
+ */
+void RS06_Save_Config(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+    uint32_t id = RS06_EXT_ID(RS06_TYPE_SAVE, RS06_HOST_ID, motor_id);
+    
+    // 根据手册 Type 22 字节序列要求[cite: 1]
+    // 对应数据区 1 内容：01 02 03 04 05 06 07 08 (手册示例序列)
+    uint8_t data[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    
+    can_send(hfdcan, id, data, 8);
+}
+
+/**
+ * @brief 完整标零保存流程
+ */
+void RS06_Zeroing_And_Save_Process(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id) {
+    // 1. 设置机械零点
+    RS06_Set_Mechanical_Zero(hfdcan, motor_id);
+    
+    // 2. 适当延时（手册建议等待反馈或留出 Flash 写入缓冲时间）
+    HAL_Delay(100); 
+    
+    // 3. 执行永久保存指令
+    RS06_Save_Config(hfdcan, motor_id);
+    
+    // 4. 再次延时确保保存成功
+    HAL_Delay(500); 
+}
+
 
 
 /**
@@ -136,16 +182,17 @@ void RS06_Set_Position_Target(FDCAN_HandleTypeDef* hfdcan, uint8_t motor_id, flo
 }
 
 /**
- * @brief  7. 舵轮测试流程（标准 CSP 模式转动 90 度演示）
+ * @brief  7. 舵轮测试流程
+ * 给出不污染主分支的测试函数，方便你在开发过程中验证 RS06 的基本功能是否正常。
  */
 void RS06_reset(void){
 uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
-    float targets[] = {-0.36f, 0.00f, 1.90f, 0.00f};
+    float targets[] = {0.00f, 0.00f, 0.00f, 0.00f};
     int motor_count = sizeof(motor_ids) / sizeof(motor_ids[0]);
 
     // 第一步：批量初始化和使能
     for (int i = 0; i < motor_count; i++) {
-        RS06_Set_Mode(&hfdcan2, motor_ids[i], RS06_MODE_PP);、
+        RS06_Set_Mode(&hfdcan2, motor_ids[i], RS06_MODE_PP);
         
         RS06_Enable(&hfdcan2, motor_ids[i]);
     }
@@ -164,3 +211,5 @@ uint8_t motor_ids[] = {0x05, 0x06, 0x07, 0x08};
     }
 
 }
+
+

@@ -117,10 +117,12 @@ int main(void)
   memset(Motor_Reporter_Cache, 0, sizeof(Motor_Reporter_Cache));
    
    HAL_TIM_Base_Start_IT(&htim15);
-   
+  RS06_Set_Mechanical_Zero(&hfdcan2,0x05);
+  // RS06_Zeroing_And_Save_Process(&hfdcan2,0x06);
+  // RS06_Zeroing_And_Save_Process(&hfdcan2,0x07);
+  // RS06_Zeroing_And_Save_Process(&hfdcan2,0x08);
   RS06_reset();
-
-  
+ 
   /* USER CODE END 2 */
 
   /* Infinite loop */
