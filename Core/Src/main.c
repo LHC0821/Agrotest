@@ -120,7 +120,7 @@ int main(void) {
     static rs06_t servo;
     rs06_init(&servo, &hfdcan2, 0x01, RS06_DEFAULT_HOST_ID);
     // rs06_zeroing_and_save(&servo);
-    rs06_pp_goto(&servo, 0.0f, 2.0f, 10.0f);
+    rs06_pp_goto(&servo, 3.14f, 2.0f, 10.0f);
 
     /* USER CODE END 2 */
 
